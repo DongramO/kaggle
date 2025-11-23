@@ -1,0 +1,13 @@
+1회차 
+
+Logistic Regression - Accuracy: 0.8982, AUC: 0.8896
+LightGBM - Accuracy: 0.9118, AUC: 0.9220
+XGBoost - Accuracy: 0.9103, AUC: 0.9205
+Ensemble - Accuracy: 0.9097, AUC: 0.9152
+
+
+2회차 - 모델 변경 CATB
+catboost - Accuracy: 0.9122, AUC: 0.9203
+LightGBM - Accuracy: 0.9122, AUC: 0.9220
+XGBoost - Accuracy: 0.9102, AUC: 0.9199
+Ensemble - Accuracy: 0.9118, AUC: 0.9213
