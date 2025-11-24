@@ -50,9 +50,10 @@ for col in cols:
     print(col, df_train[col].nunique())
  
  
-cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade']
 num_cols = ['annual_income', 'debt_to_income_ratio', 'credit_score', 'loan_amount', 'interest_rate']
- 
+
+cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 
+            'grade_subgrade']
  
 # Target Distribution Visualization
 counts = df_train['loan_paid_back'].value_counts()
@@ -212,28 +213,35 @@ def remove_outliers(df, cols):
 
     return df
 
-df_train = remove_outliers(df_train, num_cols)
+
 
 def feature_engineering(df):
-    df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
+    # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
+    
+    #  # 2. interest_rate / debt_to_income_ratio
+    # df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
+    
+    # # 3. education_level & loan_purpose
+    # df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    
+    # # 4. employment_status & loan_purpose
+    # df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    
+    # # 5. education_level & grade_subgrade
+    # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
 
-     # 2. interest_rate / debt_to_income_ratio
-    df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
-    
-    # 3. education_level & loan_purpose
-    df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
-    
-    # 4. employment_status & loan_purpose
-    df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
-    
-    # 5. education_level & grade_subgrade
-    df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
-    
+    df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
+    df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
+    df["loan_amount_div_income"] = df["loan_amount"].astype(float) / (df["annual_income"].astype(float)+ 1e-6)
+    df["loan_amount_log"] = np.log1p(df["loan_amount"])
+    df["interest_rate_log"] = np.log1p(df["interest_rate"])
+    df["annual_income_log"] = np.log1p(df["annual_income"])
+
     return df
 
-# df_train = feature_engineering(df_train)
-# df_test = feature_engineering(df_test)
-
+df_train = feature_engineering(df_train)
+df_test = feature_engineering(df_test)
+df_train = remove_outliers(df_train, num_cols)
 df_train.head()
 df_test.head()
 
@@ -246,8 +254,11 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
     
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
+    # 순서가 없는 범주형 변수들 onehot encoding
     onehot_cols = ['gender', 'marital_status', 'loan_purpose']
-    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade']
+    
+    # 순서가 있는 범주형 변수들 ordinal encoding
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade', 'sub_grade']
     
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
@@ -344,16 +355,16 @@ def create_models_with_optuna(X_train, y_train, model_type):
         model = CatBoostClassifier(**best_params)
     elif model_type == "lgbm":
         model = lgb.LGBMClassifier(**best_params)
-    else:
+    elif model_type == "xgb":
         model = xgb.XGBClassifier(**best_params)
     
     print(f"\n✅ Selected model: {model_type}")
     return model
 
 def ensemble_predict(models, X):
-    lr_model, lgb_model, xgb_model = models
+    cb_model, lgb_model, xgb_model = models
     
-    lr_pred = lr_model.predict_proba(X)[:, 1]
+    lr_pred = cb_model.predict_proba(X)[:, 1]
     lgb_pred = lgb_model.predict_proba(X)[:, 1]
     xgb_pred = xgb_model.predict_proba(X)[:, 1]
     
@@ -367,16 +378,16 @@ def main(df_train, target_col, num_cols, cat_cols):
     model_types = ["catboost", "lgbm", "xgb"]
 
     print("🔍 Optimizing models with Optuna...")
-    lr_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0])
+    cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0])
     lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1])
     xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2])
 
     print("Training optimized models...")
-    lr_model.fit(X_train_processed, y_train)
+    cb_model.fit(X_train_processed, y_train)
     lgb_model.fit(X_train_processed, y_train)
     xgb_model.fit(X_train_processed, y_train)
     
-    models = {'catboost': lr_model, 
+    models = {'catboost': cb_model, 
               'LightGBM': lgb_model, 
               'XGBoost': xgb_model}
     
@@ -391,14 +402,14 @@ def main(df_train, target_col, num_cols, cat_cols):
             print(f"{name} - Error: {e}")
 
     try:
-        ensemble_pred, ensemble_pred_proba = ensemble_predict([lr_model, lgb_model, xgb_model], X_val_processed)
+        ensemble_pred, ensemble_pred_proba = ensemble_predict([cb_model, lgb_model, xgb_model], X_val_processed)
         ensemble_acc = accuracy_score(y_val, ensemble_pred)
         ensemble_auc = roc_auc_score(y_val, ensemble_pred_proba)
         print(f"Ensemble - Accuracy: {ensemble_acc:.4f}, AUC: {ensemble_auc:.4f}")
     except Exception as e:
         print(f"Ensemble Error: {e}")
     
-    return preprocessor, lr_model, lgb_model, xgb_model
+    return preprocessor, cb_model, lgb_model, xgb_model
 
 
 if __name__ == "__main__":
@@ -406,18 +417,16 @@ if __name__ == "__main__":
     df_train = df_train
     df_test = df_test
     df_sub = df_sub
-    
-    num_cols = num_cols
-    target_col = 'loan_paid_back'
-    cat_cols = cat_cols
-    
-    preprocessor, lr_model, lgb_model, xgb_model = main(df_train, target_col, num_cols, cat_cols)
 
+    num_cols = ['debt_to_income_ratio', 'credit_score', 'loan_amount_div_income', 'loan_amount_log', 'interest_rate_log', 'annual_income_log']
+    cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade', 'head_grade', 'sub_grade']
+    target_col = 'loan_paid_back'
     
+    preprocessor, cb_model, lgb_model, xgb_model = main(df_train, target_col, num_cols, cat_cols)
     X_test_final_processed = preprocessor.transform(df_test)
     
     _, y_pred_ensemble = ensemble_predict(
-        [lr_model, lgb_model, xgb_model], 
+        [cb_model, lgb_model, xgb_model], 
         X_test_final_processed
     )
     
@@ -425,7 +434,8 @@ if __name__ == "__main__":
         'id': df_sub['id'],
         'loan_paid_back': y_pred_ensemble
     })
-    submission.to_csv('submission_ensemble.csv', index=False)
     
+    submission.to_csv('submission_ensemble.csv', index=False)
     df_confirm = pd.read_csv('submission_ensemble.csv')
+
     print(df_confirm.head())

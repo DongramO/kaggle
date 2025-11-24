@@ -11,3 +11,40 @@ catboost - Accuracy: 0.9122, AUC: 0.9203
 LightGBM - Accuracy: 0.9122, AUC: 0.9220
 XGBoost - Accuracy: 0.9102, AUC: 0.9199
 Ensemble - Accuracy: 0.9118, AUC: 0.9213
+
+
+3회차 - feature_engineering 제거
+catboost - Accuracy: 0.9121, AUC: 0.9200
+LightGBM - Accuracy: 0.9121, AUC: 0.9218
+XGBoost - Accuracy: 0.9102, AUC: 0.9201
+Ensemble - Accuracy: 0.9119, AUC: 0.9213
+
+
+4회차 - 신규 feature 생성
+df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
+df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
+df["loan_amount_div_income"] = df["loan_amount"].astype(float) / (df["annual_income"].astype(float)+ 1e-6)
+df["loan_amount_log"] = np.log1p(df["loan_amount"])
+df["interest_rate_log"] = np.log1p(df["interest_rate"])
+df["annual_income_log"] = np.log1p(df["annual_income"])
+
+catboost - Accuracy: 0.9118, AUC: 0.9194
+Ensemble - Accuracy: 0.9117, AUC: 0.9213
+XGBoost - Accuracy: 0.9104, AUC: 0.9202
+Ensemble - Accuracy: 0.9117, AUC: 0.9213
+
+
+5회차
+- 신규 feature에 대해서 정상적으로 모델에 전달 되도록 로직 변경
+- 이상치 제거하는 순서를 feature_engineering이 종료된 이후에 다 같이 진행
+
+catboost - Accuracy: 0.9121, AUC: 0.9201
+LightGBM - Accuracy: 0.9119, AUC: 0.9218
+XGBoost - Accuracy: 0.9101, AUC: 0.9194
+Ensemble - Accuracy: 0.9117, AUC: 0.9210
+
+
+6회차
+- log 변환 이후 중복되는 컬럼 삭제
+
+
