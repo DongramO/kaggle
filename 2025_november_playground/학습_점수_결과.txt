@@ -60,3 +60,9 @@ LightGBM - Accuracy: 0.9112, AUC: 0.9207
 XGBoost - Accuracy: 0.9100, AUC: 0.9189
 Ensemble - Accuracy: 0.9111, AUC: 0.9204
 
+
+8회차 importance 낮은 컬럼들 제거 / threshold 감소 0.5 -> 0.3
+catboost - Accuracy: 0.9116, AUC: 0.9191
+LightGBM - Accuracy: 0.9114, AUC: 0.9211
+XGBoost - Accuracy: 0.9099, AUC: 0.9191
+Ensemble - Accuracy: 0.9066, AUC: 0.9203

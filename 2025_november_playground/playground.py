@@ -376,7 +376,7 @@ def ensemble_predict(models, X):
     xgb_pred = xgb_model.predict_proba(X)[:, 1]
     
     ensemble_pred_proba = np.mean([cb_pred, lgb_pred, xgb_pred], axis=0)
-    ensemble_pred = (ensemble_pred_proba >= 0.5).astype(float)
+    ensemble_pred = (ensemble_pred_proba >= 0.25).astype(float)
     
     return ensemble_pred, ensemble_pred_proba
 def main(df_train, target_col, num_cols, cat_cols):
@@ -652,8 +652,21 @@ if __name__ == "__main__":
     df_test = df_test
     df_sub = df_sub
 
-    num_cols = ['debt_to_income_ratio', 'credit_score', 'loan_amount_div_income', 'loan_amount', 'interest_rate', 'annual_income', 'interest_rate_to_dti', 'loan_amount_div_ratio', 'credit_div_ratio', 'loan_amount_credit']
-    cat_cols = ['employment_status', 'loan_purpose', 'grade_subgrade', 'head_grade', 'employment_loan_purpose', 'loan_purpose_interest_rate']
+    num_cols = [
+        'debt_to_income_ratio', 'credit_score', 'loan_amount_div_income',
+        'loan_amount', 'interest_rate', 'annual_income',
+        'interest_rate_to_dti', 'loan_amount_div_ratio',
+        'credit_div_ratio', 'loan_amount_credit'
+    ]
+
+    cat_cols = [
+        'employment_status',
+        'loan_purpose',
+        'grade_subgrade',              # head_grade 제거
+        'employment_loan_purpose',
+        'loan_purpose_interest_rate'
+        # gender, marital_status, education_level 제거
+    ]
     target_col = 'loan_paid_back'
     
     preprocessor, cb_model, lgb_model, xgb_model, feature_names, onehot_cols, ordinal_cols = main(
