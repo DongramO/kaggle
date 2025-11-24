@@ -46,5 +46,17 @@ Ensemble - Accuracy: 0.9117, AUC: 0.9210
 
 6회차
 - log 변환 이후 중복되는 컬럼 삭제
+- interest_rate_to_dti 컬럼 추가
 
+catboost - Accuracy: 0.9117, AUC: 0.9197
+LightGBM - Accuracy: 0.9119, AUC: 0.9221
+XGBoost - Accuracy: 0.9097, AUC: 0.9194
+Ensemble - Accuracy: 0.9116, AUC: 0.9211
+
+
+7회차 여러가지 feature 추가
+catboost - Accuracy: 0.9115, AUC: 0.9192
+LightGBM - Accuracy: 0.9112, AUC: 0.9207
+XGBoost - Accuracy: 0.9100, AUC: 0.9189
+Ensemble - Accuracy: 0.9111, AUC: 0.9204
 

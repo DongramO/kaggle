@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
  
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import accuracy_score, roc_auc_score, classification_report, confusion_matrix
  
 import optuna
 from sklearn.model_selection import StratifiedKFold, cross_val_score
@@ -219,23 +219,22 @@ def feature_engineering(df):
     # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     
     #  # 2. interest_rate / debt_to_income_ratio
-    # df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
+    df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
     
     # # 3. education_level & loan_purpose
-    # df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
     
     # # 4. employment_status & loan_purpose
-    # df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
     
     # # 5. education_level & grade_subgrade
     # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
-
     df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
-    df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
-    df["loan_amount_div_income"] = df["loan_amount"].astype(float) / (df["annual_income"].astype(float)+ 1e-6)
-    df["loan_amount_log"] = np.log1p(df["loan_amount"])
-    df["interest_rate_log"] = np.log1p(df["interest_rate"])
-    df["annual_income_log"] = np.log1p(df["annual_income"])
+    # df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
+    df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ 1e-6)
+    df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(int)+ 1e-6)
+    df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
+    df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
 
     return df
 
@@ -252,14 +251,22 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
     X = df_train.drop(columns=[target_col])
     y = df_train[target_col]
     
+
+    df_train["loan_amount"] = np.log1p(df_train["loan_amount"])
+    df_train["interest_rate"] = np.log1p(df_train["interest_rate"])
+    df_train["annual_income"] = np.log1p(df_train["annual_income"])
+
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
     # 순서가 없는 범주형 변수들 onehot encoding
     onehot_cols = ['gender', 'marital_status', 'loan_purpose']
     
     # 순서가 있는 범주형 변수들 ordinal encoding
-    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade', 'sub_grade']
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
     
+
+
+
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     ordinal_transformer = OrdinalEncoder()
@@ -364,16 +371,21 @@ def create_models_with_optuna(X_train, y_train, model_type):
 def ensemble_predict(models, X):
     cb_model, lgb_model, xgb_model = models
     
-    lr_pred = cb_model.predict_proba(X)[:, 1]
+    cb_pred = cb_model.predict_proba(X)[:, 1]
     lgb_pred = lgb_model.predict_proba(X)[:, 1]
     xgb_pred = xgb_model.predict_proba(X)[:, 1]
     
-    ensemble_pred_proba = np.mean([lr_pred, lgb_pred, xgb_pred], axis=0)
+    ensemble_pred_proba = np.mean([cb_pred, lgb_pred, xgb_pred], axis=0)
     ensemble_pred = (ensemble_pred_proba >= 0.5).astype(float)
     
     return ensemble_pred, ensemble_pred_proba
 def main(df_train, target_col, num_cols, cat_cols):
     X_train_processed, X_val_processed, y_train, y_val, preprocessor = prepare_data(df_train, target_col, num_cols, cat_cols)
+    
+    # Feature 이름 추출을 위한 정보
+    onehot_cols = ['gender', 'marital_status', 'loan_purpose']
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
+    feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
     
     model_types = ["catboost", "lgbm", "xgb"]
 
@@ -409,7 +421,229 @@ def main(df_train, target_col, num_cols, cat_cols):
     except Exception as e:
         print(f"Ensemble Error: {e}")
     
-    return preprocessor, cb_model, lgb_model, xgb_model
+    return preprocessor, cb_model, lgb_model, xgb_model, feature_names, onehot_cols, ordinal_cols
+
+
+def get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols):
+    """전처리된 feature 이름을 추출하는 함수"""
+    # ColumnTransformer의 get_feature_names_out 사용 (가장 안전한 방법)
+    if hasattr(preprocessor, 'get_feature_names_out'):
+        try:
+            return list(preprocessor.get_feature_names_out())
+        except:
+            pass
+    
+    # 대체 방법: 수동으로 구성
+    feature_names = []
+    
+    # 수치형 컬럼
+    feature_names.extend(num_cols)
+    
+    # OneHot 인코딩된 컬럼 이름
+    onehot_transformer = preprocessor.named_transformers_['onehot']
+    if hasattr(onehot_transformer, 'get_feature_names_out'):
+        try:
+            onehot_features = onehot_transformer.get_feature_names_out(onehot_cols)
+            feature_names.extend(onehot_features)
+        except:
+            # 대체 방법
+            for i, col in enumerate(onehot_cols):
+                if hasattr(onehot_transformer, 'categories_') and i < len(onehot_transformer.categories_):
+                    categories = onehot_transformer.categories_[i]
+                    for cat in categories:
+                        feature_names.append(f"{col}_{cat}")
+    else:
+        # 구버전 호환성
+        for i, col in enumerate(onehot_cols):
+            if hasattr(onehot_transformer, 'categories_') and i < len(onehot_transformer.categories_):
+                categories = onehot_transformer.categories_[i]
+                for cat in categories:
+                    feature_names.append(f"{col}_{cat}")
+    
+    # Ordinal 인코딩된 컬럼
+    feature_names.extend(ordinal_cols)
+    
+    return feature_names
+
+
+def analyze_model_performance(models, X_val, y_val, model_names=None):
+    """모델별 상세 성능 지표를 출력하는 함수"""
+    if model_names is None:
+        model_names = list(models.keys())
+    
+    print("\n" + "="*80)
+    print("📊 모델별 상세 성능 지표")
+    print("="*80)
+    
+    for name in model_names:
+        if name not in models:
+            continue
+            
+        model = models[name]
+        y_pred = model.predict(X_val)
+        y_pred_proba = model.predict_proba(X_val)[:, 1]
+        
+        acc = accuracy_score(y_val, y_pred)
+        auc = roc_auc_score(y_val, y_pred_proba)
+        
+        print(f"\n🔹 {name} 모델")
+        print(f"   Accuracy: {acc:.4f}")
+        print(f"   ROC-AUC:  {auc:.4f}")
+        print("\n   Classification Report:")
+        print(classification_report(y_val, y_pred, target_names=['Not Paid', 'Paid']))
+        print("\n   Confusion Matrix:")
+        cm = confusion_matrix(y_val, y_pred)
+        print(f"   [[{cm[0,0]:5d}  {cm[0,1]:5d}]")
+        print(f"    [{cm[1,0]:5d}  {cm[1,1]:5d}]]")
+
+
+def get_feature_importance(model, feature_names, model_name):
+    """모델별 feature importance를 추출하는 함수"""
+    importance_dict = {}
+    
+    if model_name == 'catboost' or isinstance(model, CatBoostClassifier):
+        # CatBoost
+        importance = model.get_feature_importance()
+        importance_dict = dict(zip(feature_names, importance))
+        
+    elif model_name == 'LightGBM' or isinstance(model, lgb.LGBMClassifier):
+        # LightGBM
+        importance = model.feature_importances_
+        importance_dict = dict(zip(feature_names, importance))
+        
+    elif model_name == 'XGBoost' or isinstance(model, xgb.XGBClassifier):
+        # XGBoost
+        importance = model.feature_importances_
+        importance_dict = dict(zip(feature_names, importance))
+    
+    return importance_dict
+
+
+def visualize_feature_importance(models, feature_names, top_n=20, figsize=(15, 10)):
+    """모델별 feature importance를 시각화하는 함수"""
+    n_models = len(models)
+    fig, axes = plt.subplots(n_models, 1, figsize=figsize)
+    
+    if n_models == 1:
+        axes = [axes]
+    
+    for idx, (name, model) in enumerate(models.items()):
+        importance_dict = get_feature_importance(model, feature_names, name)
+        
+        # 중요도 순으로 정렬
+        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        top_features = sorted_importance[:top_n]
+        
+        features = [f[0] for f in top_features]
+        importances = [f[1] for f in top_features]
+        
+        # 시각화
+        axes[idx].barh(range(len(features)), importances, color='crimson')
+        axes[idx].set_yticks(range(len(features)))
+        axes[idx].set_yticklabels(features)
+        axes[idx].set_xlabel('Feature Importance')
+        axes[idx].set_title(f'{name} - Top {top_n} Feature Importance')
+        axes[idx].invert_yaxis()
+        
+        # 값 표시
+        for i, v in enumerate(importances):
+            axes[idx].text(v, i, f' {v:.2f}', va='center')
+    
+    plt.tight_layout()
+    plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
+    print("\n✅ Feature importance 시각화가 'feature_importance.png'로 저장되었습니다.")
+    plt.show()
+
+
+def compare_feature_importance(models, feature_names, top_n=15):
+    """모델별 feature importance를 비교하는 함수"""
+    print("\n" + "="*80)
+    print("📈 모델별 Feature Importance 비교 (Top {} features)".format(top_n))
+    print("="*80)
+    
+    all_importances = {}
+    
+    for name, model in models.items():
+        importance_dict = get_feature_importance(model, feature_names, name)
+        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        
+        print(f"\n🔹 {name} - Top {top_n} Features:")
+        print("-" * 80)
+        for i, (feature, importance) in enumerate(sorted_importance[:top_n], 1):
+            print(f"  {i:2d}. {feature:40s} : {importance:10.4f}")
+            if feature not in all_importances:
+                all_importances[feature] = {}
+            all_importances[feature][name] = importance
+    
+    # 통합 비교 시각화
+    common_features = set()
+    for name in models.keys():
+        importance_dict = get_feature_importance(models[name], feature_names, name)
+        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        top_features = [f[0] for f in sorted_importance[:top_n]]
+        if not common_features:
+            common_features = set(top_features)
+        else:
+            common_features = common_features.intersection(set(top_features))
+    
+    if common_features:
+        print(f"\n🔹 공통 중요 Feature (모든 모델에서 Top {top_n}에 포함):")
+        print("-" * 80)
+        for feature in sorted(common_features):
+            print(f"  - {feature}")
+
+
+def save_model_analysis(models, X_val, y_val, feature_names, preprocessor, 
+                        num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt'):
+    """모델 분석 결과를 텍스트 파일로 저장하는 함수"""
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write("="*80 + "\n")
+        f.write("모델 상세 분석 결과\n")
+        f.write("="*80 + "\n\n")
+        
+        # Feature 이름 정보
+        f.write("📋 사용된 Feature 목록:\n")
+        f.write("-" * 80 + "\n")
+        f.write(f"수치형 Feature ({len(num_cols)}개): {', '.join(num_cols)}\n")
+        f.write(f"OneHot Feature ({len(onehot_cols)}개): {', '.join(onehot_cols)}\n")
+        f.write(f"Ordinal Feature ({len(ordinal_cols)}개): {', '.join(ordinal_cols)}\n")
+        f.write(f"전체 Feature 수: {len(feature_names)}\n\n")
+        
+        # 모델별 성능
+        f.write("="*80 + "\n")
+        f.write("📊 모델별 성능 지표\n")
+        f.write("="*80 + "\n\n")
+        
+        for name, model in models.items():
+            y_pred = model.predict(X_val)
+            y_pred_proba = model.predict_proba(X_val)[:, 1]
+            
+            acc = accuracy_score(y_val, y_pred)
+            auc = roc_auc_score(y_val, y_pred_proba)
+            
+            f.write(f"🔹 {name} 모델\n")
+            f.write(f"   Accuracy: {acc:.4f}\n")
+            f.write(f"   ROC-AUC:  {auc:.4f}\n")
+            f.write("\n   Classification Report:\n")
+            f.write(classification_report(y_val, y_pred, target_names=['Not Paid', 'Paid']))
+            f.write("\n")
+        
+        # Feature Importance
+        f.write("="*80 + "\n")
+        f.write("📈 모델별 Feature Importance\n")
+        f.write("="*80 + "\n\n")
+        
+        for name, model in models.items():
+            importance_dict = get_feature_importance(model, feature_names, name)
+            sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+            
+            f.write(f"🔹 {name} - Top 20 Features:\n")
+            f.write("-" * 80 + "\n")
+            for i, (feature, importance) in enumerate(sorted_importance[:20], 1):
+                f.write(f"  {i:2d}. {feature:40s} : {importance:10.4f}\n")
+            f.write("\n")
+    
+    print(f"\n✅ 모델 분석 결과가 '{filename}'로 저장되었습니다.")
 
 
 if __name__ == "__main__":
@@ -418,11 +652,36 @@ if __name__ == "__main__":
     df_test = df_test
     df_sub = df_sub
 
-    num_cols = ['debt_to_income_ratio', 'credit_score', 'loan_amount_div_income', 'loan_amount_log', 'interest_rate_log', 'annual_income_log']
-    cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade', 'head_grade', 'sub_grade']
+    num_cols = ['debt_to_income_ratio', 'credit_score', 'loan_amount_div_income', 'loan_amount', 'interest_rate', 'annual_income', 'interest_rate_to_dti', 'loan_amount_div_ratio', 'credit_div_ratio', 'loan_amount_credit']
+    cat_cols = ['employment_status', 'loan_purpose', 'grade_subgrade', 'head_grade', 'employment_loan_purpose', 'loan_purpose_interest_rate']
     target_col = 'loan_paid_back'
     
-    preprocessor, cb_model, lgb_model, xgb_model = main(df_train, target_col, num_cols, cat_cols)
+    preprocessor, cb_model, lgb_model, xgb_model, feature_names, onehot_cols, ordinal_cols = main(
+        df_train, target_col, num_cols, cat_cols
+    )
+    
+    # 모델 분석 수행
+    models = {'catboost': cb_model, 'LightGBM': lgb_model, 'XGBoost': xgb_model}
+    X_train_processed, X_val_processed, y_train, y_val, _ = prepare_data(df_train, target_col, num_cols, cat_cols)
+    
+    print("\n" + "="*80)
+    print("🔍 모델 상세 분석 시작")
+    print("="*80)
+    
+    # 1. 모델별 상세 성능 지표 출력
+    analyze_model_performance(models, X_val_processed, y_val)
+    
+    # 2. Feature Importance 비교
+    compare_feature_importance(models, feature_names, top_n=20)
+    
+    # 3. Feature Importance 시각화
+    visualize_feature_importance(models, feature_names, top_n=20)
+    
+    # 4. 분석 결과를 파일로 저장
+    save_model_analysis(models, X_val_processed, y_val, feature_names, preprocessor,
+                       num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt')
+    
+    # 테스트 데이터 예측 및 제출 파일 생성
     X_test_final_processed = preprocessor.transform(df_test)
     
     _, y_pred_ensemble = ensemble_predict(
