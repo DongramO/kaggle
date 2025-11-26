@@ -21,8 +21,9 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 df_train = pd.read_csv('train.csv')
 df_test = pd.read_csv('test.csv')
 df_sub = pd.read_csv('sample_submission.csv')
- 
- 
+
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
 print(df_train.head())
  
 print('df_train.shape', df_train.shape)
@@ -75,7 +76,7 @@ for bar, count in zip(bars, values):
     plt.text(width, bar.get_y() + bar.get_height()/2,
              f"{count}\n({pct:.1f}%)",
              ha='left', va='center')
-# plt.show()
+# # plt.show()
  
  
 # Data dirtribution visualization
@@ -88,7 +89,7 @@ for i, col in enumerate(num_cols):
     axes[i,1].set_title(f'{col} boxplot')
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
 # outliers
@@ -109,7 +110,7 @@ if n_vars % 2 !=0:
     fig.delaxes(axes[n_rows-1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
  
@@ -134,7 +135,7 @@ for i, col in enumerate(cat_cols):
     axes[i,1].set_title(f'{col} Pie chart')
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
 n_vars = len(cat_cols)
 n_cols = 2
@@ -155,7 +156,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
 n_vars = len(cat_cols)
@@ -196,7 +197,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
 
 
 def remove_outliers(df, cols):
@@ -226,13 +227,16 @@ def feature_engineering(df):
     
     # # 4. employment_status & loan_purpose
     df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
-    
+
+    df["monthly_income"] = df["annual_income"] / 12
+    df["debt_to_monthly_income"] = df["debt_to_income_ratio"] / (df["monthly_income"] + 1e-6)
+    df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
     # # 5. education_level & grade_subgrade
     # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
     df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
     # df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
     df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ 1e-6)
-    df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(int)+ 1e-6)
+    df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ 1e-6)
     df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
     df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
 
@@ -240,7 +244,7 @@ def feature_engineering(df):
 
 df_train = feature_engineering(df_train)
 df_test = feature_engineering(df_test)
-df_train = remove_outliers(df_train, num_cols)
+# df_train = remove_outliers(df_train, num_cols)
 df_train.head()
 df_test.head()
 
@@ -264,9 +268,6 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
     # 순서가 있는 범주형 변수들 ordinal encoding
     ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
     
-
-
-
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     ordinal_transformer = OrdinalEncoder()
@@ -291,12 +292,14 @@ def optimize_models(X_train, y_train, model_type):
         
         if model_type == "catboost":
             params = {
+                "iterations": trial.suggest_int("iterations", 100, 500),
+                "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-5, 10.0, log=True),
+                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+                "random_strength": trial.suggest_float("random_strength", 0.0, 1.0),
+                "depth": trial.suggest_int("depth", 4, 10),
+                "random_seed": rs,
                 "loss_function": "Logloss",      # 2진 분류 기본
                 "eval_metric": "AUC",            # 모니터링할 지표
-                "iterations": trial.suggest_int("iterations", 100, 500),               # 트리 개수
-                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
-                "depth": trial.suggest_int("depth", 4, 10),
-                "random_state": rs,
                 "verbose": False,   
             }
             model = CatBoostClassifier(**params)
@@ -346,27 +349,93 @@ def optimize_models(X_train, y_train, model_type):
     # 실제로 모델을 돌려보면서 최적의 파라메터를 찾는 과정
     study.optimize(objective, n_trials=50)
     
-    print("\nBest trial:")
+    print("\nBest trial:" , model_type)
     print(study.best_trial.params)
     return study.best_trial.params
 
 
-def create_models_with_optuna(X_train, y_train, model_type):
-    best_params = optimize_models(X_train, y_train, model_type)
+def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
+    """Optuna 최적화 또는 고정 파라미터로 모델 생성"""
     
-    # 최적의 파라메터를 갖는 모델을 반환
-    # model_type = best_params.pop("model")
-
-    # 모델별로 하나씩 돌려서 파라메터를 확보하는건가???
-    if model_type == "catboost":
-        model = CatBoostClassifier(**best_params)
-    elif model_type == "lgbm":
-        model = lgb.LGBMClassifier(**best_params)
-    elif model_type == "xgb":
-        model = xgb.XGBClassifier(**best_params)
+    if use_fixed_params:
+        # 고정 파라미터 사용
+        if model_type == "catboost":
+            fixed_params = {
+                "loss_function": "Logloss",
+                "eval_metric": "AUC",
+                "iterations": 478,
+                "learning_rate": 0.09918246016024668,
+                'l2_leaf_reg': 0.10336505202563943,
+                'random_strength': 0.0933390543005998,
+                "depth": 7,
+                "random_seed": rs,
+                "verbose": False,
+            }
+            model = CatBoostClassifier(**fixed_params)
+            
+        elif model_type == "lgbm":
+            fixed_params = {
+                "n_estimators": 774,
+                "learning_rate": 0.047051628921977035,
+                "num_leaves": 34,
+                "max_depth": 12,
+                "subsample": 0.7046955802104758,
+                "colsample_bytree": 0.854461065661112,
+                "reg_alpha": 8.876014045236223,
+                "reg_lambda": 1.41657000413366,
+                "random_state": rs,
+                "verbose": -1,
+            }
+            model = lgb.LGBMClassifier(**fixed_params)
+            
+        elif model_type == "xgb":
+            fixed_params = {
+                "n_estimators": 767,
+                "learning_rate": 0.04941706054533553,
+                "max_depth": 5,
+                "subsample": 0.9032294063778931,
+                "colsample_bytree": 0.5574373428339369,
+                "min_child_weight": 10,
+                "gamma": 0.14827696333170587,
+                "reg_alpha": 0.0034542264442943855,
+                "reg_lambda": 0.0017437934010550243,
+                "random_state": rs,
+                "eval_metric": "auc"
+            }
+            model = xgb.XGBClassifier(**fixed_params)
+        
+        print(f"✅ {model_type.upper()} 모델 생성 완료 (고정 파라미터 사용)")
+        return model
     
-    print(f"\n✅ Selected model: {model_type}")
-    return model
+    else:
+        try:
+            print(f"\n🚀 {model_type.upper()} 최적화 시작...")
+            best_params = optimize_models(X_train, y_train, model_type)
+            
+            # 최적 파라미터 재확인 출력
+            print(f"✅ {model_type.upper()} 최종 사용 파라미터:")
+            print("-" * 80)
+            for key, value in sorted(best_params.items()):
+                print(f"  {key:25s}: {value}")
+            print("-" * 80)
+            
+            # 모델 생성
+            if model_type == "catboost":
+                model = CatBoostClassifier(**best_params)
+            elif model_type == "lgbm":
+                model = lgb.LGBMClassifier(**best_params)
+            elif model_type == "xgb":
+                model = xgb.XGBClassifier(**best_params)
+            
+            print(f"✅ {model_type.upper()} 모델 생성 완료\n")
+            return model
+            
+        except Exception as e:
+            print(f"\n❌ {model_type.upper()} 모델 생성 실패: {e}")
+            print(f"에러 타입: {type(e).__name__}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 def ensemble_predict(models, X):
     cb_model, lgb_model, xgb_model = models
@@ -390,9 +459,9 @@ def main(df_train, target_col, num_cols, cat_cols):
     model_types = ["catboost", "lgbm", "xgb"]
 
     print("🔍 Optimizing models with Optuna...")
-    cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0])
-    lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1])
-    xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2])
+    cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0], use_fixed_params=True)
+    lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1], use_fixed_params=True)
+    xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2], use_fixed_params=True)
 
     print("Training optimized models...")
     cb_model.fit(X_train_processed, y_train)
@@ -552,7 +621,7 @@ def visualize_feature_importance(models, feature_names, top_n=20, figsize=(15, 1
     plt.tight_layout()
     plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
     print("\n✅ Feature importance 시각화가 'feature_importance.png'로 저장되었습니다.")
-    plt.show()
+    # plt.show()
 
 
 def compare_feature_importance(models, feature_names, top_n=15):
@@ -656,7 +725,7 @@ if __name__ == "__main__":
         'debt_to_income_ratio', 'credit_score', 'loan_amount_div_income',
         'loan_amount', 'interest_rate', 'annual_income',
         'interest_rate_to_dti', 'loan_amount_div_ratio',
-        'credit_div_ratio', 'loan_amount_credit'
+        'credit_div_ratio', "monthly_income", "debt_to_monthly_income"
     ]
 
     cat_cols = [

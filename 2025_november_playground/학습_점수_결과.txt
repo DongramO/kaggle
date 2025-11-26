@@ -66,3 +66,35 @@ catboost - Accuracy: 0.9116, AUC: 0.9191
 LightGBM - Accuracy: 0.9114, AUC: 0.9211
 XGBoost - Accuracy: 0.9099, AUC: 0.9191
 Ensemble - Accuracy: 0.9066, AUC: 0.9203
+
+
+9회차 threshold 감소 0.3 -> 0.25
+catboost - Accuracy: 0.9115, AUC: 0.9190
+LightGBM - Accuracy: 0.9114, AUC: 0.9215
+XGBoost - Accuracy: 0.9100, AUC: 0.9192
+Ensemble - Accuracy: 0.9055, AUC: 0.9205
+
+
+10회차 
+- monthly_income, debt_to_monthly_income, monthly_income_interest_amount
+- 하이퍼 파라메터 고정
+catboost - Accuracy: 0.9118, AUC: 0.9193
+LightGBM - Accuracy: 0.9115, AUC: 0.9212
+XGBoost - Accuracy: 0.9098, AUC: 0.9193
+Ensemble - Accuracy: 0.9116, AUC: 0.9205
+
+catboost - Accuracy: 0.9117, AUC: 0.9197
+LightGBM - Accuracy: 0.9114, AUC: 0.9213
+XGBoost - Accuracy: 0.9098, AUC: 0.9193
+Ensemble - Accuracy: 0.9113, AUC: 0.9207
+
+
+11회차 이상치 비비제거 / threshold 0.5 -> 0.3
+catboost - Accuracy: 0.9058, AUC: 0.9219
+LightGBM - Accuracy: 0.9056, AUC: 0.9233
+XGBoost - Accuracy: 0.9047, AUC: 0.9219
+Ensemble - Accuracy: 0.8985, AUC: 0.9229
+
+
+12회차 목표 -> not-paid recall 수치에 대한 정확도 향상
+- 추가적인 feature_engineering을 통해 명확한 기준을 만들어 보기
