@@ -53,7 +53,8 @@ for col in cols:
  
 num_cols = ['annual_income', 'debt_to_income_ratio', 'credit_score', 'loan_amount', 'interest_rate']
 
-cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade']
+cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 
+            'grade_subgrade']
  
 # Target Distribution Visualization
 counts = df_train['loan_paid_back'].value_counts()
@@ -75,7 +76,7 @@ for bar, count in zip(bars, values):
     plt.text(width, bar.get_y() + bar.get_height()/2,
              f"{count}\n({pct:.1f}%)",
              ha='left', va='center')
-# plt.show()
+# # plt.show()
  
  
 # Data dirtribution visualization
@@ -88,7 +89,7 @@ for i, col in enumerate(num_cols):
     axes[i,1].set_title(f'{col} boxplot')
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
 # outliers
@@ -109,7 +110,7 @@ if n_vars % 2 !=0:
     fig.delaxes(axes[n_rows-1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
  
@@ -134,7 +135,7 @@ for i, col in enumerate(cat_cols):
     axes[i,1].set_title(f'{col} Pie chart')
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
 n_vars = len(cat_cols)
 n_cols = 2
@@ -155,7 +156,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
  
  
 n_vars = len(cat_cols)
@@ -196,7 +197,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# plt.show()
+# # plt.show()
 
 
 def remove_outliers(df, cols):
@@ -216,40 +217,29 @@ def remove_outliers(df, cols):
 
 
 def feature_engineering(df):
+    # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     
-    # 1. interest_rate / debt_to_income_ratio
+    #  # 2. interest_rate / debt_to_income_ratio
     df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
     
-    # 2. education_level & loan_purpose
-    df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + df["interest_rate"].round(1).astype(str)
+    # # 3. education_level & loan_purpose
+    df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
     
-    # 3. employment_status & loan_purpose
-    df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
+    # # 4. employment_status & loan_purpose
     df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
-    # df["education_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["education_level"].astype(str)
-    
 
-    # 4. monthly_income 
     df["monthly_income"] = df["annual_income"] / 12
     df["debt_to_monthly_income"] = df["debt_to_income_ratio"] / (df["monthly_income"] + 1e-6)
-    # df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
-    
-    # 5. education_level & grade_subgrade
+    df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
+    # # 5. education_level & grade_subgrade
     # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
     df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
-    
-    # 6. loan_amount_div
+    # df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
     df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ 1e-6)
     df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ 1e-6)
     df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
-    
-    
-    # 7. creadit
     df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
-    
-    # 범주형 특성 변수
-    
-    
+
     return df
 
 df_train = feature_engineering(df_train)
@@ -260,7 +250,54 @@ df_test.head()
 
 rs = 42
 
-def prepare_data(df_train, target_col, num_cols, cat_cols):
+def after_feature_engineering(X_encoded, feature_names, X_original=None, num_cols=None):
+    """
+    Transformer로 encoding된 특성들과 기존 특성들을 조합하는 함수
+    
+    Returns:
+    --------
+    X_combined : numpy array
+        조합된 특성들
+    updated_feature_names : list
+        업데이트된 특성 이름 리스트 (새로 생성된 특성 포함)
+    """
+    # DataFrame으로 변환
+    X_encoded_df = pd.DataFrame(X_encoded, columns=feature_names)
+    
+    # 업데이트된 feature_names (새로 생성된 특성 이름을 추가)
+    updated_feature_names = feature_names.copy()
+    
+    # 1. OneHot 인코딩된 loan_purpose 특성들 찾기
+    loan_purpose_cols = [col for col in feature_names if col.startswith('loan_purpose_')]
+    
+    # 2. 수치형 특성들 찾기 (StandardScaler를 거친 후에도 이름은 그대로)
+    numeric_features = []
+    if num_cols:
+        numeric_features = [f for f in feature_names if f in num_cols]
+    
+    # 3. OneHot 인코딩된 loan_purpose 특성과 수치형 특성을 곱셈으로 조합
+    if len(loan_purpose_cols) > 0:
+        # interest_rate와 조합
+        if 'interest_rate' in numeric_features:
+            for loan_purpose_col in loan_purpose_cols:
+                new_feature_name = f'{loan_purpose_col}_x_interest_rate'
+                X_encoded_df[new_feature_name] = (
+                    X_encoded_df[loan_purpose_col] * X_encoded_df['interest_rate']
+                )
+                updated_feature_names.append(new_feature_name)
+        
+        # annual_income과 조합
+        if 'annual_income' in numeric_features:
+            for loan_purpose_col in loan_purpose_cols:
+                new_feature_name = f'{loan_purpose_col}_x_annual_income'
+                X_encoded_df[new_feature_name] = (
+                    X_encoded_df[loan_purpose_col] * X_encoded_df['annual_income']
+                )
+                updated_feature_names.append(new_feature_name)
+    
+    return X_encoded_df.values, updated_feature_names
+
+def prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=False):
     
     X = df_train.drop(columns=[target_col])
     y = df_train[target_col]
@@ -272,29 +309,11 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
 
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
-    #    'employment_status',
-    #    'loan_purpose',
-    #    'grade_subgrade',              # head_grade 제거
-    #    'employment_loan_purpose',
-    #    'education_loan_purpose',
-    #    'employment_status_grade_subgrade',
-    #    'loan_purpose_interest_rate'
-    #    gender, marital_status, education_level 제거
-   
     # 순서가 없는 범주형 변수들 onehot encoding
-    onehot_cols = ['gender', 'marital_status', 'loan_purpose',
-                   'employment_loan_purpose',
-                   'loan_purpose_interest_rate'
-                #    'education_loan_purpose',
-                
-                   
-                   ]
+    onehot_cols = ['gender', 'marital_status', 'loan_purpose']
     
     # 순서가 있는 범주형 변수들 ordinal encoding
-    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade',
-                    'employment_status_grade_subgrade',
-                    'employment_loan_purpose'
-                    ]
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
     
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
@@ -311,8 +330,25 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
     
     X_train_processed = preprocessor.fit_transform(X_train)
     X_val_processed = preprocessor.transform(X_val)
+
+    if create_combinations:
+        # Feature 이름 가져오기
+        feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
+        
+        # 특성 조합 생성 (새로운 feature_names도 함께 반환)
+        X_train_processed, updated_feature_names = after_feature_engineering(
+            X_train_processed, feature_names, X_original=X_train, num_cols=num_cols
+        )
+        X_val_processed, _ = after_feature_engineering(
+            X_val_processed, feature_names, X_original=X_val, num_cols=num_cols
+        )
+        
+        print(f"✅ 특성 조합 완료: {len(feature_names)}개 → {len(updated_feature_names)}개 특성")
+        feature_names = updated_feature_names  # 업데이트된 feature_names 사용
+    else:
+        feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
     
-    return X_train_processed, X_val_processed, y_train, y_val, preprocessor
+    return X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names
 
 def optimize_models(X_train, y_train, model_type):
     def objective(trial):
@@ -380,7 +416,6 @@ def optimize_models(X_train, y_train, model_type):
     print("\nBest trial:" , model_type)
     print(study.best_trial.params)
     return study.best_trial.params
-
 
 def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
     """Optuna 최적화 또는 고정 파라미터로 모델 생성"""
@@ -477,8 +512,10 @@ def ensemble_predict(models, X):
     
     return ensemble_pred, ensemble_pred_proba
 def main(df_train, target_col, num_cols, cat_cols):
-    X_train_processed, X_val_processed, y_train, y_val, preprocessor = prepare_data(df_train, target_col, num_cols, cat_cols)
-    
+    X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names = prepare_data(
+        df_train, target_col, num_cols, cat_cols, create_combinations=True
+    )
+
     # Feature 이름 추출을 위한 정보
     onehot_cols = ['gender', 'marital_status', 'loan_purpose']
     ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
@@ -616,7 +653,7 @@ def get_feature_importance(model, feature_names, model_name):
     return importance_dict
 
 
-def visualize_feature_importance(models, feature_names, top_n=20, figsize=(15, 10)):
+def visualize_feature_importance(models, feature_names, top_n=30, figsize=(15, 10)):
     """모델별 feature importance를 시각화하는 함수"""
     n_models = len(models)
     fig, axes = plt.subplots(n_models, 1, figsize=figsize)
@@ -690,6 +727,7 @@ def compare_feature_importance(models, feature_names, top_n=15):
             print(f"  - {feature}")
 
 
+
 def save_model_analysis(models, X_val, y_val, feature_names, preprocessor, 
                         num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt'):
     """모델 분석 결과를 텍스트 파일로 저장하는 함수"""
@@ -705,6 +743,29 @@ def save_model_analysis(models, X_val, y_val, feature_names, preprocessor,
         f.write(f"OneHot Feature ({len(onehot_cols)}개): {', '.join(onehot_cols)}\n")
         f.write(f"Ordinal Feature ({len(ordinal_cols)}개): {', '.join(ordinal_cols)}\n")
         f.write(f"전체 Feature 수: {len(feature_names)}\n\n")
+        
+        # 전체 Feature 목록 출력 (신규 피쳐 포함)
+        f.write("📋 전체 Feature 목록 (신규 조합 특성 포함):\n")
+        f.write("-" * 80 + "\n")
+        
+        # 원본 특성과 신규 특성 구분
+        original_features = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
+        new_features = [f for f in feature_names if f not in original_features]
+        
+        f.write(f"원본 특성 수: {len(original_features)}\n")
+        f.write(f"신규 조합 특성 수: {len(new_features)}\n\n")
+        
+        if new_features:
+            f.write("🆕 신규 조합 특성 목록:\n")
+            for i, feat in enumerate(new_features, 1):
+                f.write(f"  {i:3d}. {feat}\n")
+            f.write("\n")
+        
+        f.write("전체 특성 목록:\n")
+        for i, feat in enumerate(feature_names, 1):
+            is_new = "🆕" if feat in new_features else "  "
+            f.write(f"  {i:3d}. {is_new} {feat}\n")
+        f.write("\n")
         
         # 모델별 성능
         f.write("="*80 + "\n")
@@ -725,23 +786,26 @@ def save_model_analysis(models, X_val, y_val, feature_names, preprocessor,
             f.write(classification_report(y_val, y_pred, target_names=['Not Paid', 'Paid']))
             f.write("\n")
         
-        # Feature Importance
+        # Feature Importance - 모든 특성 저장
         f.write("="*80 + "\n")
-        f.write("📈 모델별 Feature Importance\n")
+        f.write("📈 모델별 Feature Importance (전체 특성)\n")
         f.write("="*80 + "\n\n")
         
         for name, model in models.items():
             importance_dict = get_feature_importance(model, feature_names, name)
             sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
             
-            f.write(f"🔹 {name} - Top 20 Features:\n")
+            f.write(f"🔹 {name} - 전체 Features ({len(sorted_importance)}개):\n")
             f.write("-" * 80 + "\n")
-            for i, (feature, importance) in enumerate(sorted_importance[:20], 1):
-                f.write(f"  {i:2d}. {feature:40s} : {importance:10.4f}\n")
+            for i, (feature, importance) in enumerate(sorted_importance, 1):
+                is_new = "🆕" if feature in new_features else "  "
+                f.write(f"  {i:3d}. {is_new} {feature:50s} : {importance:10.4f}\n")
             f.write("\n")
     
     print(f"\n✅ 모델 분석 결과가 '{filename}'로 저장되었습니다.")
-
+    print(f"   - 전체 특성 수: {len(feature_names)}개")
+    if new_features:
+        print(f"   - 신규 조합 특성 수: {len(new_features)}개")
 
 if __name__ == "__main__":
 
@@ -754,17 +818,16 @@ if __name__ == "__main__":
         'loan_amount', 'interest_rate', 'annual_income',
         'interest_rate_to_dti', 'loan_amount_div_ratio',
         'credit_div_ratio', "monthly_income", "debt_to_monthly_income",
-        'loan_amount_credit'
+        # 'after_loan_purpose_interest_rate',
+        # 'after_loan_purpose_income'
     ]
 
     cat_cols = [
         'employment_status',
         'loan_purpose',
         'grade_subgrade',              # head_grade 제거
-        'loan_purpose_interest_rate'
         'employment_loan_purpose',
-        'employment_status_grade_subgrade',
-        # 'education_loan_purpose',
+        'loan_purpose_interest_rate'
         # gender, marital_status, education_level 제거
     ]
     target_col = 'loan_paid_back'
@@ -775,8 +838,10 @@ if __name__ == "__main__":
     
     # 모델 분석 수행
     models = {'catboost': cb_model, 'LightGBM': lgb_model, 'XGBoost': xgb_model}
-    X_train_processed, X_val_processed, y_train, y_val, _ = prepare_data(df_train, target_col, num_cols, cat_cols)
+    X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names = prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=True)
     
+   
+
     print("\n" + "="*80)
     print("🔍 모델 상세 분석 시작")
     print("="*80)
