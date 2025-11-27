@@ -4,32 +4,32 @@
 
 📋 사용된 Feature 목록:
 --------------------------------------------------------------------------------
-수치형 Feature (11개): debt_to_income_ratio, credit_score, loan_amount_div_income, loan_amount, interest_rate, annual_income, interest_rate_to_dti, loan_amount_div_ratio, credit_div_ratio, monthly_income, debt_to_monthly_income
+수치형 Feature (12개): debt_to_income_ratio, credit_score, loan_amount_div_income, loan_amount, interest_rate, annual_income, interest_rate_to_dti, loan_amount_div_ratio, credit_div_ratio, monthly_income, debt_to_monthly_income, loan_amount_credit
 OneHot Feature (3개): gender, marital_status, loan_purpose
 Ordinal Feature (4개): education_level, employment_status, grade_subgrade, head_grade
-전체 Feature 수: 30
+전체 Feature 수: 73
 
 ================================================================================
 📊 모델별 성능 지표
 ================================================================================
 
 🔹 catboost 모델
-   Accuracy: 0.9049
-   ROC-AUC:  0.9208
+   Accuracy: 0.9051
+   ROC-AUC:  0.9206
 
    Classification Report:
               precision    recall  f1-score   support
 
-    Not Paid       0.88      0.61      0.72     23997
+    Not Paid       0.88      0.62      0.72     23997
         Paid       0.91      0.98      0.94     94802
 
-    accuracy                           0.90    118799
+    accuracy                           0.91    118799
    macro avg       0.89      0.80      0.83    118799
-weighted avg       0.90      0.90      0.90    118799
+weighted avg       0.90      0.91      0.90    118799
 
 🔹 LightGBM 모델
-   Accuracy: 0.9048
-   ROC-AUC:  0.9215
+   Accuracy: 0.9046
+   ROC-AUC:  0.9217
 
    Classification Report:
               precision    recall  f1-score   support
@@ -38,17 +38,17 @@ weighted avg       0.90      0.90      0.90    118799
         Paid       0.91      0.98      0.94     94802
 
     accuracy                           0.90    118799
-   macro avg       0.89      0.80      0.83    118799
+   macro avg       0.89      0.79      0.83    118799
 weighted avg       0.90      0.90      0.90    118799
 
 🔹 XGBoost 모델
-   Accuracy: 0.9039
-   ROC-AUC:  0.9205
+   Accuracy: 0.9043
+   ROC-AUC:  0.9206
 
    Classification Report:
               precision    recall  f1-score   support
 
-    Not Paid       0.88      0.60      0.72     23997
+    Not Paid       0.88      0.61      0.72     23997
         Paid       0.91      0.98      0.94     94802
 
     accuracy                           0.90    118799
@@ -61,70 +61,70 @@ weighted avg       0.90      0.90      0.90    118799
 
 🔹 catboost - Top 20 Features:
 --------------------------------------------------------------------------------
-   1. ordinal__employment_status               :    37.7912
-   2. num__debt_to_income_ratio                :    23.5615
-   3. num__credit_score                        :    16.5566
-   4. num__credit_div_ratio                    :     5.9965
-   5. num__loan_amount                         :     2.2281
-   6. num__interest_rate                       :     2.0276
-   7. ordinal__head_grade                      :     1.5527
-   8. ordinal__grade_subgrade                  :     1.5021
-   9. num__monthly_income                      :     1.3358
-  10. num__interest_rate_to_dti                :     1.2420
-  11. num__debt_to_monthly_income              :     1.2340
-  12. num__annual_income                       :     1.0572
-  13. ordinal__education_level                 :     0.8305
-  14. num__loan_amount_div_ratio               :     0.7775
-  15. num__loan_amount_div_income              :     0.6841
-  16. onehot__loan_purpose_Other               :     0.2878
-  17. onehot__loan_purpose_Education           :     0.2012
-  18. onehot__loan_purpose_Debt consolidation  :     0.1665
-  19. onehot__loan_purpose_Medical             :     0.1328
-  20. onehot__gender_Female                    :     0.1317
+   1. num__debt_to_income_ratio                :    21.8466
+   2. ordinal__employment_status_grade_subgrade :    18.0559
+   3. num__credit_score                        :    17.0562
+   4. ordinal__employment_loan_purpose         :     6.7895
+   5. num__credit_div_ratio                    :     6.4969
+   6. ordinal__employment_status               :     4.8923
+   7. onehot__employment_loan_purpose_Retired_Debt consolidation :     3.5823
+   8. num__loan_amount                         :     2.1417
+   9. num__interest_rate                       :     2.1208
+  10. num__interest_rate_to_dti                :     1.4871
+  11. onehot__employment_loan_purpose_Retired_Other :     1.4272
+  12. ordinal__head_grade                      :     1.3688
+  13. num__debt_to_monthly_income              :     1.1975
+  14. ordinal__grade_subgrade                  :     1.0703
+  15. num__monthly_income                      :     1.0166
+  16. onehot__employment_loan_purpose_Retired_Car :     1.0024
+  17. num__annual_income                       :     0.9466
+  18. num__loan_amount_div_ratio               :     0.9447
+  19. num__loan_amount_div_income              :     0.8676
+  20. num__loan_amount_credit                  :     0.8395
 
 🔹 LightGBM - Top 20 Features:
 --------------------------------------------------------------------------------
-   1. num__debt_to_income_ratio                :  5011.0000
-   2. num__credit_score                        :  3297.0000
-   3. num__interest_rate                       :  2563.0000
-   4. num__loan_amount                         :  2538.0000
-   5. num__annual_income                       :  2168.0000
-   6. num__credit_div_ratio                    :  1433.0000
-   7. num__loan_amount_div_income              :  1349.0000
-   8. num__debt_to_monthly_income              :  1338.0000
-   9. num__loan_amount_div_ratio               :  1200.0000
-  10. ordinal__grade_subgrade                  :  1078.0000
-  11. num__interest_rate_to_dti                :  1042.0000
-  12. ordinal__employment_status               :   792.0000
-  13. ordinal__education_level                 :   416.0000
-  14. num__monthly_income                      :   302.0000
-  15. onehot__loan_purpose_Education           :   110.0000
-  16. onehot__marital_status_Married           :   107.0000
-  17. ordinal__head_grade                      :   105.0000
-  18. onehot__loan_purpose_Debt consolidation  :    89.0000
-  19. onehot__gender_Female                    :    87.0000
-  20. onehot__loan_purpose_Other               :    86.0000
+   1. num__debt_to_income_ratio                :  4725.0000
+   2. num__credit_score                        :  3044.0000
+   3. num__interest_rate                       :  2375.0000
+   4. num__annual_income                       :  2012.0000
+   5. num__loan_amount                         :  1912.0000
+   6. ordinal__employment_status_grade_subgrade :  1261.0000
+   7. num__credit_div_ratio                    :  1230.0000
+   8. num__debt_to_monthly_income              :  1182.0000
+   9. num__loan_amount_div_income              :  1157.0000
+  10. num__loan_amount_credit                  :  1145.0000
+  11. num__loan_amount_div_ratio               :   979.0000
+  12. num__interest_rate_to_dti                :   970.0000
+  13. ordinal__grade_subgrade                  :   778.0000
+  14. ordinal__employment_loan_purpose         :   552.0000
+  15. ordinal__education_level                 :   363.0000
+  16. num__monthly_income                      :   320.0000
+  17. onehot__employment_loan_purpose_Retired_Debt consolidation :   162.0000
+  18. ordinal__employment_status               :   155.0000
+  19. ordinal__head_grade                      :   109.0000
+  20. onehot__marital_status_Married           :    97.0000
 
 🔹 XGBoost - Top 20 Features:
 --------------------------------------------------------------------------------
-   1. ordinal__employment_status               :     0.7971
-   2. num__credit_div_ratio                    :     0.0614
-   3. ordinal__grade_subgrade                  :     0.0258
-   4. num__credit_score                        :     0.0186
-   5. num__interest_rate_to_dti                :     0.0175
-   6. ordinal__head_grade                      :     0.0162
-   7. num__debt_to_income_ratio                :     0.0157
-   8. num__loan_amount_div_ratio               :     0.0039
-   9. num__debt_to_monthly_income              :     0.0032
-  10. num__interest_rate                       :     0.0028
-  11. num__loan_amount                         :     0.0026
-  12. onehot__loan_purpose_Education           :     0.0025
-  13. onehot__loan_purpose_Home                :     0.0024
-  14. num__annual_income                       :     0.0024
-  15. ordinal__education_level                 :     0.0021
-  16. num__loan_amount_div_income              :     0.0021
-  17. num__monthly_income                      :     0.0021
-  18. onehot__loan_purpose_Other               :     0.0020
-  19. onehot__loan_purpose_Medical             :     0.0019
-  20. onehot__loan_purpose_Business            :     0.0018
+   1. ordinal__employment_status               :     0.4500
+   2. ordinal__employment_status_grade_subgrade :     0.1472
+   3. ordinal__employment_loan_purpose         :     0.0929
+   4. onehot__employment_loan_purpose_Self-employed_Debt consolidation :     0.0423
+   5. num__credit_div_ratio                    :     0.0338
+   6. onehot__employment_loan_purpose_Unemployed_Debt consolidation :     0.0309
+   7. onehot__employment_loan_purpose_Employed_Debt consolidation :     0.0254
+   8. onehot__employment_loan_purpose_Unemployed_Education :     0.0233
+   9. onehot__employment_loan_purpose_Unemployed_Other :     0.0135
+  10. onehot__employment_loan_purpose_Retired_Debt consolidation :     0.0131
+  11. onehot__loan_purpose_Debt consolidation  :     0.0124
+  12. ordinal__grade_subgrade                  :     0.0109
+  13. ordinal__head_grade                      :     0.0096
+  14. onehot__employment_loan_purpose_Unemployed_Car :     0.0083
+  15. num__credit_score                        :     0.0077
+  16. num__debt_to_income_ratio                :     0.0066
+  17. onehot__employment_loan_purpose_Unemployed_Home :     0.0057
+  18. onehot__employment_loan_purpose_Retired_Other :     0.0053
+  19. onehot__employment_loan_purpose_Retired_Car :     0.0044
+  20. onehot__employment_loan_purpose_Retired_Business :     0.0040
 

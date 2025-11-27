@@ -53,8 +53,7 @@ for col in cols:
  
 num_cols = ['annual_income', 'debt_to_income_ratio', 'credit_score', 'loan_amount', 'interest_rate']
 
-cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 
-            'grade_subgrade']
+cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade']
  
 # Target Distribution Visualization
 counts = df_train['loan_paid_back'].value_counts()
@@ -76,7 +75,7 @@ for bar, count in zip(bars, values):
     plt.text(width, bar.get_y() + bar.get_height()/2,
              f"{count}\n({pct:.1f}%)",
              ha='left', va='center')
-# # plt.show()
+# plt.show()
  
  
 # Data dirtribution visualization
@@ -89,7 +88,7 @@ for i, col in enumerate(num_cols):
     axes[i,1].set_title(f'{col} boxplot')
  
 plt.tight_layout()
-# # plt.show()
+# plt.show()
  
  
 # outliers
@@ -110,7 +109,7 @@ if n_vars % 2 !=0:
     fig.delaxes(axes[n_rows-1, 1])
  
 plt.tight_layout()
-# # plt.show()
+# plt.show()
  
  
  
@@ -135,7 +134,7 @@ for i, col in enumerate(cat_cols):
     axes[i,1].set_title(f'{col} Pie chart')
  
 plt.tight_layout()
-# # plt.show()
+# plt.show()
  
 n_vars = len(cat_cols)
 n_cols = 2
@@ -156,7 +155,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# # plt.show()
+# plt.show()
  
  
 n_vars = len(cat_cols)
@@ -197,7 +196,7 @@ if n_vars % 2 != 0:
     fig.delaxes(axes[n_rows - 1, 1])
  
 plt.tight_layout()
-# # plt.show()
+# plt.show()
 
 
 def remove_outliers(df, cols):
@@ -217,29 +216,40 @@ def remove_outliers(df, cols):
 
 
 def feature_engineering(df):
-    # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     
-    #  # 2. interest_rate / debt_to_income_ratio
+    # 1. interest_rate / debt_to_income_ratio
     df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
     
-    # # 3. education_level & loan_purpose
-    df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
+    # 2. education_level & loan_purpose
+    df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + df["interest_rate"].round(1).astype(str)
     
-    # # 4. employment_status & loan_purpose
+    # 3. employment_status & loan_purpose
+    df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    # df["education_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["education_level"].astype(str)
+    
 
+    # 4. monthly_income 
     df["monthly_income"] = df["annual_income"] / 12
     df["debt_to_monthly_income"] = df["debt_to_income_ratio"] / (df["monthly_income"] + 1e-6)
-    df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
-    # # 5. education_level & grade_subgrade
+    # df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
+    
+    # 5. education_level & grade_subgrade
     # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
     df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
-    # df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
+    
+    # 6. loan_amount_div
     df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ 1e-6)
     df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ 1e-6)
     df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
+    
+    
+    # 7. creadit
     df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
-
+    
+    # 범주형 특성 변수
+    
+    
     return df
 
 df_train = feature_engineering(df_train)
@@ -262,11 +272,29 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
 
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
+    #    'employment_status',
+    #    'loan_purpose',
+    #    'grade_subgrade',              # head_grade 제거
+    #    'employment_loan_purpose',
+    #    'education_loan_purpose',
+    #    'employment_status_grade_subgrade',
+    #    'loan_purpose_interest_rate'
+    #    gender, marital_status, education_level 제거
+   
     # 순서가 없는 범주형 변수들 onehot encoding
-    onehot_cols = ['gender', 'marital_status', 'loan_purpose']
+    onehot_cols = ['gender', 'marital_status', 'loan_purpose',
+                   'employment_loan_purpose',
+                   'loan_purpose_interest_rate'
+                #    'education_loan_purpose',
+                
+                   
+                   ]
     
     # 순서가 있는 범주형 변수들 ordinal encoding
-    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade',
+                    'employment_status_grade_subgrade',
+                    'employment_loan_purpose'
+                    ]
     
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
@@ -725,15 +753,18 @@ if __name__ == "__main__":
         'debt_to_income_ratio', 'credit_score', 'loan_amount_div_income',
         'loan_amount', 'interest_rate', 'annual_income',
         'interest_rate_to_dti', 'loan_amount_div_ratio',
-        'credit_div_ratio', "monthly_income", "debt_to_monthly_income"
+        'credit_div_ratio', "monthly_income", "debt_to_monthly_income",
+        'loan_amount_credit'
     ]
 
     cat_cols = [
         'employment_status',
         'loan_purpose',
         'grade_subgrade',              # head_grade 제거
-        'employment_loan_purpose',
         'loan_purpose_interest_rate'
+        'employment_loan_purpose',
+        'employment_status_grade_subgrade',
+        # 'education_loan_purpose',
         # gender, marital_status, education_level 제거
     ]
     target_col = 'loan_paid_back'

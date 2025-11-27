@@ -101,3 +101,12 @@ Ensemble - Accuracy: 0.8985, AUC: 0.9229
 
 12회차 목표 -> not-paid recall 수치에 대한 정확도 향상
 - 추가적인 feature_engineering을 통해 명확한 기준을 만들어 보기
+'employment_loan_purpose',
+'education_loan_purpose',
+'employment_status_grade_subgrade',
+
+catboost - Accuracy: 0.9057, AUC: 0.9221
+LightGBM - Accuracy: 0.9056, AUC: 0.9234
+XGBoost - Accuracy: 0.9049, AUC: 0.9220
+Ensemble - Accuracy: 0.8986, AUC: 0.9230
+
