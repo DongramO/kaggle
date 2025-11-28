@@ -6,7 +6,8 @@ from catboost import CatBoostClassifier
 from sklearn.linear_model import LogisticRegression
 import lightgbm as lgb
 import xgboost as xgb
- 
+from scipy.optimize import minimize
+from sklearn.metrics import log_loss
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.compose import ColumnTransformer
@@ -24,180 +25,180 @@ df_sub = pd.read_csv('sample_submission.csv')
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-print(df_train.head())
- 
-print('df_train.shape', df_train.shape)
-print('df_test.shape', df_test.shape)
- 
-print(df_train.info())
-print(df_test.info())
-print(df_train.describe())
- 
- 
-print('df_train.shape:', df_train.shape)
-print('df_test.shape:', df_test.shape)
- 
- 
-print(df_train.info())
-print(df_test.info())
-print(df_train.describe())
- 
-cols = ['id', 'annual_income', 'debt_to_income_ratio', 'credit_score',
-       'loan_amount', 'interest_rate', 'gender', 'marital_status',
-       'education_level', 'employment_status', 'loan_purpose',
-       'grade_subgrade', 'loan_paid_back']
- 
-for col in cols:
-    print(col, df_train[col].nunique())
- 
- 
-num_cols = ['annual_income', 'debt_to_income_ratio', 'credit_score', 'loan_amount', 'interest_rate']
+def eda(df_train, df_test, df_sub):
+    print(df_train.head())
+    
+    print('df_train.shape', df_train.shape)
+    print('df_test.shape', df_test.shape)
+    
+    print(df_train.info())
+    print(df_test.info())
+    print(df_train.describe())
+    
+    
+    print('df_train.shape:', df_train.shape)
+    print('df_test.shape:', df_test.shape)
+    
+    
+    print(df_train.info())
+    print(df_test.info())
+    print(df_train.describe())
+    
+    cols = ['id', 'annual_income', 'debt_to_income_ratio', 'credit_score',
+        'loan_amount', 'interest_rate', 'gender', 'marital_status',
+        'education_level', 'employment_status', 'loan_purpose',
+        'grade_subgrade', 'loan_paid_back']
+    
+    for col in cols:
+        print(col, df_train[col].nunique())
+    
+    
+    num_cols = ['annual_income', 'debt_to_income_ratio', 'credit_score', 'loan_amount', 'interest_rate']
 
-cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 
-            'grade_subgrade']
- 
-# Target Distribution Visualization
-counts = df_train['loan_paid_back'].value_counts()
-labels = counts.index
-values = counts.values
- 
-plt.figure(figsize=(15,5.5))
- 
-bars = plt.barh(labels, values, color = 'crimson')
-plt.ylabel("loan_paid_back")
-plt.xlabel("Frequency")
-plt.title("The Distribution of the Target Column 'loan_paid_back'")
-plt.yticks([1, 0])
- 
-total = values.sum()
-for bar, count in zip(bars, values):
-    width = bar.get_width()
-    pct = count / total * 100
-    plt.text(width, bar.get_y() + bar.get_height()/2,
-             f"{count}\n({pct:.1f}%)",
-             ha='left', va='center')
-# # plt.show()
- 
- 
-# Data dirtribution visualization
-n_vars = len(num_cols)
-fig, axes = plt.subplots(n_vars, 2, figsize=(12, n_vars*3))
-for i, col in enumerate(num_cols):
-    axes[i,0].hist(df_train[col], bins=50, edgecolor='black', color='crimson')
-    axes[i,0].set_title(f'{col} histogram')
-    axes[i,1].boxplot(df_train[col], vert=False)
-    axes[i,1].set_title(f'{col} boxplot')
- 
-plt.tight_layout()
-# # plt.show()
- 
- 
-# outliers
- 
-n_vars = len(num_cols)
-n_cols = 2
-n_rows = (n_vars + 1) // n_cols
- 
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, n_vars * 3))
- 
-for i, col in enumerate(num_cols):
-    row = i // 2
-    col_idx = i % 2
-    sns.boxplot(x='loan_paid_back', y=col, data=df_train, ax=axes[row, col_idx], palette='pastel')
-    axes[row, col_idx].set_title(f'{col} by loan_paid_back')
- 
-if n_vars % 2 !=0:
-    fig.delaxes(axes[n_rows-1, 1])
- 
-plt.tight_layout()
-# # plt.show()
- 
- 
- 
-n_vars = len(cat_cols)
-fig, axes = plt.subplots(n_vars, 2, figsize=(14, n_vars*8))
- 
-for i, col in enumerate(cat_cols):
-    sns.countplot(x=df_train[col], ax=axes[i,0], order=df_train[col].value_counts().index, palette='pastel')
-    axes[i,0].set_title(f'{col} countplot')
-    axes[i,0].set_xlabel('')
-    axes[i,0].set_ylabel('Count')
-    axes[i,0].tick_params(axis='x', rotation=45)
- 
-    df_train[col].value_counts().plot.pie(
-        ax=axes[i, 1],
-        autopct='%1.1f%%',
-        startangle=90,
-        colors=sns.color_palette('pastel'),
-        legend=False,
-        ylabel=''
-    )
-    axes[i,1].set_title(f'{col} Pie chart')
- 
-plt.tight_layout()
-# # plt.show()
- 
-n_vars = len(cat_cols)
-n_cols = 2
-n_rows = (n_vars + 1) // 2
- 
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 5 * n_rows))
- 
-for i, col in enumerate(cat_cols):
-    row  = i // 2
-    col_idx = i % 2
-    sns.countplot(x=col, hue='loan_paid_back', data=df_train, ax=axes[row, col_idx], palette='pastel')
-    axes[row, col_idx].set_title(f"{col} by loan_paid_back")
-    axes[row, col_idx].tick_params(axis='x', rotation=45)
-    axes[row, col_idx].set_xlabel(col)
-    axes[row, col_idx].set_ylabel('Count')
- 
-if n_vars % 2 != 0:
-    fig.delaxes(axes[n_rows - 1, 1])
- 
-plt.tight_layout()
-# # plt.show()
- 
- 
-n_vars = len(cat_cols)
-n_cols = 2
-n_rows = (n_vars + 1) // 2
- 
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 5 * n_rows))
- 
-for i, col in enumerate(cat_cols):
-    row = i // 2
-    col_idx = i % 2
- 
-    ratio = (
-        df_train.groupby(col)['loan_paid_back']
-        .value_counts(normalize=True)
-        .rename('ratio')
-        .mul(100)
-        .reset_index()
-    )
- 
-    ratio = ratio[ratio['loan_paid_back'] == 0]
- 
-    sns.barplot(
-        data=ratio,
-        x=col,
-        y='ratio',
-        ax=axes[row, col_idx],
-        palette='pastel'
-    )
- 
-    axes[row, col_idx].set_title(f"{col}: % Not Paid Back")
-    axes[row, col_idx].set_xlabel(col)
-    axes[row, col_idx].set_ylabel('% Not Paid Back')
-    axes[row, col_idx].tick_params(axis='x', rotation=45)
-    axes[row, col_idx].bar_label(axes[row, col_idx].containers[0], fmt='%.1f%%', label_type='edge', fontsize=9)
- 
-if n_vars % 2 != 0:
-    fig.delaxes(axes[n_rows - 1, 1])
- 
-plt.tight_layout()
-# # plt.show()
+    cat_cols = ['gender', 'marital_status', 'education_level', 'employment_status', 'loan_purpose', 'grade_subgrade']
+    
+    # Target Distribution Visualization
+    counts = df_train['loan_paid_back'].value_counts()
+    labels = counts.index
+    values = counts.values
+    
+    plt.figure(figsize=(15,5.5))
+    
+    bars = plt.barh(labels, values, color = 'crimson')
+    plt.ylabel("loan_paid_back")
+    plt.xlabel("Frequency")
+    plt.title("The Distribution of the Target Column 'loan_paid_back'")
+    plt.yticks([1, 0])
+    
+    total = values.sum()
+    for bar, count in zip(bars, values):
+        width = bar.get_width()
+        pct = count / total * 100
+        plt.text(width, bar.get_y() + bar.get_height()/2,
+                f"{count}\n({pct:.1f}%)",
+                ha='left', va='center')
+    # plt.show()
+    
+    
+    # Data dirtribution visualization
+    n_vars = len(num_cols)
+    fig, axes = plt.subplots(n_vars, 2, figsize=(12, n_vars*3))
+    for i, col in enumerate(num_cols):
+        axes[i,0].hist(df_train[col], bins=50, edgecolor='black', color='crimson')
+        axes[i,0].set_title(f'{col} histogram')
+        axes[i,1].boxplot(df_train[col], vert=False)
+        axes[i,1].set_title(f'{col} boxplot')
+    
+    plt.tight_layout()
+    # plt.show()
+    
+    
+    # outliers
+    
+    n_vars = len(num_cols)
+    n_cols = 2
+    n_rows = (n_vars + 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(12, n_vars * 3))
+    
+    for i, col in enumerate(num_cols):
+        row = i // 2
+        col_idx = i % 2
+        sns.boxplot(x='loan_paid_back', y=col, data=df_train, ax=axes[row, col_idx], palette='pastel')
+        axes[row, col_idx].set_title(f'{col} by loan_paid_back')
+    
+    if n_vars % 2 !=0:
+        fig.delaxes(axes[n_rows-1, 1])
+    
+    plt.tight_layout()
+    # plt.show()
+    
+    
+    
+    n_vars = len(cat_cols)
+    fig, axes = plt.subplots(n_vars, 2, figsize=(14, n_vars*8))
+    
+    for i, col in enumerate(cat_cols):
+        sns.countplot(x=df_train[col], ax=axes[i,0], order=df_train[col].value_counts().index, palette='pastel')
+        axes[i,0].set_title(f'{col} countplot')
+        axes[i,0].set_xlabel('')
+        axes[i,0].set_ylabel('Count')
+        axes[i,0].tick_params(axis='x', rotation=45)
+    
+        df_train[col].value_counts().plot.pie(
+            ax=axes[i, 1],
+            autopct='%1.1f%%',
+            startangle=90,
+            colors=sns.color_palette('pastel'),
+            legend=False,
+            ylabel=''
+        )
+        axes[i,1].set_title(f'{col} Pie chart')
+    
+    plt.tight_layout()
+    # plt.show()
+    
+    n_vars = len(cat_cols)
+    n_cols = 2
+    n_rows = (n_vars + 1) // 2
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 5 * n_rows))
+    
+    for i, col in enumerate(cat_cols):
+        row  = i // 2
+        col_idx = i % 2
+        sns.countplot(x=col, hue='loan_paid_back', data=df_train, ax=axes[row, col_idx], palette='pastel')
+        axes[row, col_idx].set_title(f"{col} by loan_paid_back")
+        axes[row, col_idx].tick_params(axis='x', rotation=45)
+        axes[row, col_idx].set_xlabel(col)
+        axes[row, col_idx].set_ylabel('Count')
+    
+    if n_vars % 2 != 0:
+        fig.delaxes(axes[n_rows - 1, 1])
+    
+    plt.tight_layout()
+    # plt.show()
+    
+    
+    n_vars = len(cat_cols)
+    n_cols = 2
+    n_rows = (n_vars + 1) // 2
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 5 * n_rows))
+    
+    for i, col in enumerate(cat_cols):
+        row = i // 2
+        col_idx = i % 2
+    
+        ratio = (
+            df_train.groupby(col)['loan_paid_back']
+            .value_counts(normalize=True)
+            .rename('ratio')
+            .mul(100)
+            .reset_index()
+        )
+    
+        ratio = ratio[ratio['loan_paid_back'] == 0]
+    
+        sns.barplot(
+            data=ratio,
+            x=col,
+            y='ratio',
+            ax=axes[row, col_idx],
+            palette='pastel'
+        )
+    
+        axes[row, col_idx].set_title(f"{col}: % Not Paid Back")
+        axes[row, col_idx].set_xlabel(col)
+        axes[row, col_idx].set_ylabel('% Not Paid Back')
+        axes[row, col_idx].tick_params(axis='x', rotation=45)
+        axes[row, col_idx].bar_label(axes[row, col_idx].containers[0], fmt='%.1f%%', label_type='edge', fontsize=9)
+    
+    if n_vars % 2 != 0:
+        fig.delaxes(axes[n_rows - 1, 1])
+    
+    plt.tight_layout()
+    # plt.show()
 
 
 def remove_outliers(df, cols):
@@ -217,29 +218,40 @@ def remove_outliers(df, cols):
 
 
 def feature_engineering(df):
-    # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
+    eps = 1e-6
+    # 1. interest_rate / debt_to_income_ratio
+    df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + eps)
     
-    #  # 2. interest_rate / debt_to_income_ratio
-    df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + 1e-6)
-    
-    # # 3. education_level & loan_purpose
+    # 2. education_level & loan_purpose
     df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
     
-    # # 4. employment_status & loan_purpose
+    # 3. employment_status & loan_purpose
+    df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
+    df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
 
+    # 4. monthly_income 
     df["monthly_income"] = df["annual_income"] / 12
-    df["debt_to_monthly_income"] = df["debt_to_income_ratio"] / (df["monthly_income"] + 1e-6)
-    df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
-    # # 5. education_level & grade_subgrade
+    df["debt_to_monthly_income"] = df["debt_to_income_ratio"] / (df["monthly_income"] + eps)
+    # df["monthly_income_interest_amount"] = df["monthly_income"] / ( df["interest_rate"] * df["loan_amount"] / 12)
+    df["estimated_monthly_payment"] = (df["loan_amount"] * df["interest_rate"]) / 12
+    df["pti_ratio"] = df["estimated_monthly_payment"] / (df["monthly_income"] + eps)
+    
+    # 5. education_level & grade_subgrade
     # df["education_grade_subgrade"] = df["education_level"].astype(str) + "_" + df["grade_subgrade"].astype(str)
     df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
-    # df["sub_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[1]
-    df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ 1e-6)
-    df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ 1e-6)
-    df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
-    df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ 1e-6)
-
+    
+    # 6. loan_amount_div
+    df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ eps)
+    df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ eps)
+    df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ eps)
+    
+    # 7. creadit
+    df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ eps)
+    
+    # 범주형 특성 변수
+    
+    
     return df
 
 df_train = feature_engineering(df_train)
@@ -250,54 +262,7 @@ df_test.head()
 
 rs = 42
 
-def after_feature_engineering(X_encoded, feature_names, X_original=None, num_cols=None):
-    """
-    Transformer로 encoding된 특성들과 기존 특성들을 조합하는 함수
-    
-    Returns:
-    --------
-    X_combined : numpy array
-        조합된 특성들
-    updated_feature_names : list
-        업데이트된 특성 이름 리스트 (새로 생성된 특성 포함)
-    """
-    # DataFrame으로 변환
-    X_encoded_df = pd.DataFrame(X_encoded, columns=feature_names)
-    
-    # 업데이트된 feature_names (새로 생성된 특성 이름을 추가)
-    updated_feature_names = feature_names.copy()
-    
-    # 1. OneHot 인코딩된 loan_purpose 특성들 찾기
-    loan_purpose_cols = [col for col in feature_names if col.startswith('loan_purpose_')]
-    
-    # 2. 수치형 특성들 찾기 (StandardScaler를 거친 후에도 이름은 그대로)
-    numeric_features = []
-    if num_cols:
-        numeric_features = [f for f in feature_names if f in num_cols]
-    
-    # 3. OneHot 인코딩된 loan_purpose 특성과 수치형 특성을 곱셈으로 조합
-    if len(loan_purpose_cols) > 0:
-        # interest_rate와 조합
-        if 'interest_rate' in numeric_features:
-            for loan_purpose_col in loan_purpose_cols:
-                new_feature_name = f'{loan_purpose_col}_x_interest_rate'
-                X_encoded_df[new_feature_name] = (
-                    X_encoded_df[loan_purpose_col] * X_encoded_df['interest_rate']
-                )
-                updated_feature_names.append(new_feature_name)
-        
-        # annual_income과 조합
-        if 'annual_income' in numeric_features:
-            for loan_purpose_col in loan_purpose_cols:
-                new_feature_name = f'{loan_purpose_col}_x_annual_income'
-                X_encoded_df[new_feature_name] = (
-                    X_encoded_df[loan_purpose_col] * X_encoded_df['annual_income']
-                )
-                updated_feature_names.append(new_feature_name)
-    
-    return X_encoded_df.values, updated_feature_names
-
-def prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=False):
+def prepare_data(df_train, target_col, num_cols, cat_cols):
     
     X = df_train.drop(columns=[target_col])
     y = df_train[target_col]
@@ -309,11 +274,17 @@ def prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=F
 
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
+   
     # 순서가 없는 범주형 변수들 onehot encoding
-    onehot_cols = ['gender', 'marital_status', 'loan_purpose']
+    onehot_cols = ['gender', 'marital_status', 'loan_purpose',
+                #    'employment_loan_purpose',
+                #    'education_loan_purpose',
+                   ]
     
     # 순서가 있는 범주형 변수들 ordinal encoding
-    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
+    ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade',
+                    'employment_status_grade_subgrade',
+                    ]
     
     num_transformer = StandardScaler()
     onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
@@ -330,25 +301,8 @@ def prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=F
     
     X_train_processed = preprocessor.fit_transform(X_train)
     X_val_processed = preprocessor.transform(X_val)
-
-    if create_combinations:
-        # Feature 이름 가져오기
-        feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
-        
-        # 특성 조합 생성 (새로운 feature_names도 함께 반환)
-        X_train_processed, updated_feature_names = after_feature_engineering(
-            X_train_processed, feature_names, X_original=X_train, num_cols=num_cols
-        )
-        X_val_processed, _ = after_feature_engineering(
-            X_val_processed, feature_names, X_original=X_val, num_cols=num_cols
-        )
-        
-        print(f"✅ 특성 조합 완료: {len(feature_names)}개 → {len(updated_feature_names)}개 특성")
-        feature_names = updated_feature_names  # 업데이트된 feature_names 사용
-    else:
-        feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
     
-    return X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names
+    return X_train_processed, X_val_processed, y_train, y_val, preprocessor
 
 def optimize_models(X_train, y_train, model_type):
     def objective(trial):
@@ -357,7 +311,7 @@ def optimize_models(X_train, y_train, model_type):
         if model_type == "catboost":
             params = {
                 "iterations": trial.suggest_int("iterations", 100, 500),
-                "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-5, 10.0, log=True),
+                "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1, 100.0, log=True),
                 "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
                 "random_strength": trial.suggest_float("random_strength", 0.0, 1.0),
                 "depth": trial.suggest_int("depth", 4, 10),
@@ -500,30 +454,66 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
             traceback.print_exc()
             raise
 
-def ensemble_predict(models, X):
+def find_optimal_weights(models, X_valid, y_valid):
+    cb_model, lgb_model, xgb_model = models
+    
+    # 각 모델 확률 예측 가져오기
+    cb_pred = cb_model.predict_proba(X_valid)[:, 1]
+    lgb_pred = lgb_model.predict_proba(X_valid)[:, 1]
+    xgb_pred = xgb_model.predict_proba(X_valid)[:, 1]
+    
+    preds = np.vstack([cb_pred, lgb_pred, xgb_pred]).T  # shape: (N, 3)
+
+    # 초기값 (균등분배)
+    init_w = np.array([1/3, 1/3, 1/3])
+
+    # 제약조건: w >= 0, sum(w)=1
+    constraints = ({
+        'type': 'eq',
+        'fun': lambda w: np.sum(w) - 1
+    })
+    min_w = 0.1
+    bounds = [(min_w, 1)] * 3
+
+    # 목적 함수: logloss 최소화
+    def loss_fn(w):
+        blended = np.dot(preds, w)
+        return log_loss(y_valid, blended)
+
+    result = minimize(loss_fn, init_w, method='SLSQP',
+                      bounds=bounds, constraints=constraints)
+
+    optimal_w = result.x
+    # print(f"Optimal weights: {optimal_w}")
+    return optimal_w
+
+def ensemble_predict(models, X, weights):
     cb_model, lgb_model, xgb_model = models
     
     cb_pred = cb_model.predict_proba(X)[:, 1]
     lgb_pred = lgb_model.predict_proba(X)[:, 1]
     xgb_pred = xgb_model.predict_proba(X)[:, 1]
     
-    ensemble_pred_proba = np.mean([cb_pred, lgb_pred, xgb_pred], axis=0)
+    preds = np.vstack([cb_pred, lgb_pred, xgb_pred]).T  # (N, 3)
+    
+    ensemble_pred_proba = np.dot(preds, weights)
     ensemble_pred = (ensemble_pred_proba >= 0.25).astype(float)
     
     return ensemble_pred, ensemble_pred_proba
-def main(df_train, target_col, num_cols, cat_cols):
-    X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names = prepare_data(
-        df_train, target_col, num_cols, cat_cols, create_combinations=True
-    )
 
+def main(df_train, target_col, num_cols, cat_cols):
+    X_train_processed, X_val_processed, y_train, y_val, preprocessor = prepare_data(df_train, target_col, num_cols, cat_cols)
+    
     # Feature 이름 추출을 위한 정보
     onehot_cols = ['gender', 'marital_status', 'loan_purpose']
     ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
+
     feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
     
     model_types = ["catboost", "lgbm", "xgb"]
 
     print("🔍 Optimizing models with Optuna...")
+
     cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0], use_fixed_params=True)
     lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1], use_fixed_params=True)
     xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2], use_fixed_params=True)
@@ -548,7 +538,8 @@ def main(df_train, target_col, num_cols, cat_cols):
             print(f"{name} - Error: {e}")
 
     try:
-        ensemble_pred, ensemble_pred_proba = ensemble_predict([cb_model, lgb_model, xgb_model], X_val_processed)
+        weights = find_optimal_weights([cb_model, lgb_model, xgb_model], X_val_processed, y_val)
+        ensemble_pred, ensemble_pred_proba = ensemble_predict([cb_model, lgb_model, xgb_model], X_val_processed, weights)
         ensemble_acc = accuracy_score(y_val, ensemble_pred)
         ensemble_auc = roc_auc_score(y_val, ensemble_pred_proba)
         print(f"Ensemble - Accuracy: {ensemble_acc:.4f}, AUC: {ensemble_auc:.4f}")
@@ -812,22 +803,25 @@ if __name__ == "__main__":
     df_train = df_train
     df_test = df_test
     df_sub = df_sub
+    # eda(df_train, df_test, df_sub)
 
     num_cols = [
         'debt_to_income_ratio', 'credit_score', 'loan_amount_div_income',
         'loan_amount', 'interest_rate', 'annual_income',
         'interest_rate_to_dti', 'loan_amount_div_ratio',
-        'credit_div_ratio', "monthly_income", "debt_to_monthly_income",
-        # 'after_loan_purpose_interest_rate',
-        # 'after_loan_purpose_income'
+        'credit_div_ratio', 
+        'loan_amount_credit',
+        # 'estimated_monthly_payment', 'pti_ratio'
     ]
 
     cat_cols = [
         'employment_status',
         'loan_purpose',
         'grade_subgrade',              # head_grade 제거
-        'employment_loan_purpose',
         'loan_purpose_interest_rate'
+        # 'employment_loan_purpose',
+        # 'employment_status_grade_subgrade',
+        # 'education_loan_purpose',
         # gender, marital_status, education_level 제거
     ]
     target_col = 'loan_paid_back'
@@ -838,22 +832,20 @@ if __name__ == "__main__":
     
     # 모델 분석 수행
     models = {'catboost': cb_model, 'LightGBM': lgb_model, 'XGBoost': xgb_model}
-    X_train_processed, X_val_processed, y_train, y_val, preprocessor, feature_names = prepare_data(df_train, target_col, num_cols, cat_cols, create_combinations=True)
+    X_train_processed, X_val_processed, y_train, y_val, _ = prepare_data(df_train, target_col, num_cols, cat_cols)
     
-   
-
     print("\n" + "="*80)
     print("🔍 모델 상세 분석 시작")
     print("="*80)
     
-    # 1. 모델별 상세 성능 지표 출력
-    analyze_model_performance(models, X_val_processed, y_val)
+    # # 1. 모델별 상세 성능 지표 출력
+    # analyze_model_performance(models, X_val_processed, y_val)
     
-    # 2. Feature Importance 비교
-    compare_feature_importance(models, feature_names, top_n=20)
+    # # 2. Feature Importance 비교
+    # compare_feature_importance(models, feature_names, top_n=20)
     
-    # 3. Feature Importance 시각화
-    visualize_feature_importance(models, feature_names, top_n=20)
+    # # 3. Feature Importance 시각화
+    # visualize_feature_importance(models, feature_names, top_n=20)
     
     # 4. 분석 결과를 파일로 저장
     save_model_analysis(models, X_val_processed, y_val, feature_names, preprocessor,
@@ -862,9 +854,11 @@ if __name__ == "__main__":
     # 테스트 데이터 예측 및 제출 파일 생성
     X_test_final_processed = preprocessor.transform(df_test)
     
+    weights = find_optimal_weights([cb_model, lgb_model, xgb_model], X_val_processed, y_val)
     _, y_pred_ensemble = ensemble_predict(
         [cb_model, lgb_model, xgb_model], 
-        X_test_final_processed
+        X_test_final_processed,
+        weights
     )
     
     submission = pd.DataFrame({
