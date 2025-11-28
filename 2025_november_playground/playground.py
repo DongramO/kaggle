@@ -228,7 +228,7 @@ def feature_engineering(df):
     # 3. employment_status & loan_purpose
     df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
     df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
-    # df["education_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["education_level"].astype(str)
+    df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
     
 
     # 4. monthly_income 
@@ -278,6 +278,7 @@ def prepare_data(df_train, target_col, num_cols, cat_cols):
     # 순서가 없는 범주형 변수들 onehot encoding
     onehot_cols = ['gender', 'marital_status', 'loan_purpose',
                    'employment_loan_purpose',
+                   'education_loan_purpose',
                    ]
     
     # 순서가 있는 범주형 변수들 ordinal encoding
@@ -472,7 +473,8 @@ def find_optimal_weights(models, X_valid, y_valid):
         'type': 'eq',
         'fun': lambda w: np.sum(w) - 1
     })
-    bounds = [(0, 1)] * 3
+    min_w = 0.1
+    bounds = [(min_w, 1)] * 3
 
     # 목적 함수: logloss 최소화
     def loss_fn(w):
@@ -483,6 +485,7 @@ def find_optimal_weights(models, X_valid, y_valid):
                       bounds=bounds, constraints=constraints)
 
     optimal_w = result.x
+    print(f"Optimal weights: {optimal_w}")
     return optimal_w
 
 def ensemble_predict(models, X, weights):
@@ -512,9 +515,9 @@ def main(df_train, target_col, num_cols, cat_cols):
 
     print("🔍 Optimizing models with Optuna...")
 
-    cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0], use_fixed_params=True)
-    lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1], use_fixed_params=True)
-    xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2], use_fixed_params=True)
+    cb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[0], use_fixed_params=False)
+    lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1], use_fixed_params=False)
+    xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2], use_fixed_params=False)
 
     print("Training optimized models...")
     cb_model.fit(X_train_processed, y_train)

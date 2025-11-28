@@ -110,3 +110,10 @@ LightGBM - Accuracy: 0.9056, AUC: 0.9234
 XGBoost - Accuracy: 0.9049, AUC: 0.9220
 Ensemble - Accuracy: 0.8986, AUC: 0.9230
 
+
+13회차
+
+catboost - Accuracy: 0.9060, AUC: 0.9219
+LightGBM - Accuracy: 0.9058, AUC: 0.9234
+XGBoost - Accuracy: 0.9051, AUC: 0.9218
+Ensemble - Accuracy: 0.8987, AUC: 0.9234
