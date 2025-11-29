@@ -339,7 +339,7 @@ def optimize_models(X_train, y_train, model_type):
         
         else:  # XGBoost
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 100, 800),
+                "n_estimators": trial.suggest_int("n_estimators", 300, 800),
                 "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.05, log=True),
                 "max_depth": trial.suggest_int("max_depth", 3, 12),
                 "subsample": trial.suggest_float("subsample", 0.6, 1.0),
@@ -350,7 +350,7 @@ def optimize_models(X_train, y_train, model_type):
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
                 "random_state": rs,
                 # "use_label_encoder": False,
-                "eval_metric": "auc"
+                "eval_metric": "auc",
             }
             model = xgb.XGBClassifier(**params)
         
@@ -362,8 +362,8 @@ def optimize_models(X_train, y_train, model_type):
         return np.mean(scores)
 
     # optuna를 통해 최적의 파라메터를 찾아가는 과정
-    study = optuna.create_study(direction="maximize")
-
+    sampler = optuna.samplers.TPESampler(seed=rs)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
     # 실제로 모델을 돌려보면서 최적의 파라메터를 찾는 과정
     study.optimize(objective, n_trials=50)
     
@@ -380,10 +380,10 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
             fixed_params = {
                 "loss_function": "Logloss",
                 "eval_metric": "AUC",
-                "iterations": 478,
-                "learning_rate": 0.09918246016024668,
-                'l2_leaf_reg': 0.10336505202563943,
-                'random_strength': 0.0933390543005998,
+                "iterations": 475,
+                "learning_rate": 0.09983620901362981,
+                'l2_leaf_reg': 15.332725842146589,
+                'random_strength': 0.7485180520264623,
                 "depth": 7,
                 "random_seed": rs,
                 "verbose": False,
@@ -392,14 +392,14 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
             
         elif model_type == "lgbm":
             fixed_params = {
-                "n_estimators": 774,
-                "learning_rate": 0.047051628921977035,
-                "num_leaves": 34,
-                "max_depth": 12,
-                "subsample": 0.7046955802104758,
-                "colsample_bytree": 0.854461065661112,
-                "reg_alpha": 8.876014045236223,
-                "reg_lambda": 1.41657000413366,
+                "colsample_bytree": 0.5295722198581925,
+                "learning_rate": 0.04919972117020984,
+                "max_depth": 8,
+                "n_estimators": 576,
+                "num_leaves": 93,
+                "reg_alpha": 9.320749906598678,
+                "reg_lambda": 0.045393254289234894,
+                "subsample": 0.8368214696612971,
                 "random_state": rs,
                 "verbose": -1,
             }
@@ -407,17 +407,17 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
             
         elif model_type == "xgb":
             fixed_params = {
-                "n_estimators": 767,
-                "learning_rate": 0.04941706054533553,
-                "max_depth": 5,
-                "subsample": 0.9032294063778931,
-                "colsample_bytree": 0.5574373428339369,
-                "min_child_weight": 10,
-                "gamma": 0.14827696333170587,
-                "reg_alpha": 0.0034542264442943855,
-                "reg_lambda": 0.0017437934010550243,
+                "colsample_bytree": 0.9738845151688945,
+                "gamma": 0.6097633807345567,
+                "learning_rate": 0.03398329815843991,
+                "max_depth": 7,
+                "min_child_weight": 5,
+                "n_estimators": 690,
+                "reg_alpha": 4.931603458294555,
+                "reg_lambda": 0.14289737491259996,
+                "subsample": 0.7574655551921472,
                 "random_state": rs,
-                "eval_metric": "auc"
+                "eval_metric": "auc",
             }
             model = xgb.XGBClassifier(**fixed_params)
         
@@ -507,8 +507,6 @@ def main(df_train, target_col, num_cols, cat_cols):
     # Feature 이름 추출을 위한 정보
     onehot_cols = ['gender', 'marital_status', 'loan_purpose']
     ordinal_cols = ['education_level', 'employment_status', 'grade_subgrade', 'head_grade']
-
-    feature_names = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
     
     model_types = ["catboost", "lgbm", "xgb"]
 
@@ -518,10 +516,32 @@ def main(df_train, target_col, num_cols, cat_cols):
     lgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[1], use_fixed_params=True)
     xgb_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[2], use_fixed_params=True)
 
+    feature_names = preprocessor.get_feature_names_out()
+    X_train_df = pd.DataFrame(X_train_processed, columns=feature_names)
+    X_val_df = pd.DataFrame(X_val_processed, columns=feature_names)
+    
     print("Training optimized models...")
-    cb_model.fit(X_train_processed, y_train)
-    lgb_model.fit(X_train_processed, y_train)
-    xgb_model.fit(X_train_processed, y_train)
+    cb_model.fit(
+        X_train_processed, y_train,
+        eval_set=[(X_val_processed, y_val)],
+        use_best_model=True,
+        verbose=False
+    )
+    
+    lgb_model.fit(
+        X_train_df, y_train,
+        eval_set=[(X_val_df, y_val)],
+        callbacks=[
+            lgb.early_stopping(stopping_rounds=100),
+            lgb.log_evaluation(0)
+        ]
+    )
+    
+    xgb_model.fit(
+        X_train_processed, y_train,
+        eval_set=[(X_val_processed, y_val)],
+        verbose=False
+    )
     
     models = {'catboost': cb_model, 
               'LightGBM': lgb_model, 
@@ -546,49 +566,7 @@ def main(df_train, target_col, num_cols, cat_cols):
     except Exception as e:
         print(f"Ensemble Error: {e}")
     
-    return preprocessor, cb_model, lgb_model, xgb_model, feature_names, onehot_cols, ordinal_cols
-
-
-def get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols):
-    """전처리된 feature 이름을 추출하는 함수"""
-    # ColumnTransformer의 get_feature_names_out 사용 (가장 안전한 방법)
-    if hasattr(preprocessor, 'get_feature_names_out'):
-        try:
-            return list(preprocessor.get_feature_names_out())
-        except:
-            pass
-    
-    # 대체 방법: 수동으로 구성
-    feature_names = []
-    
-    # 수치형 컬럼
-    feature_names.extend(num_cols)
-    
-    # OneHot 인코딩된 컬럼 이름
-    onehot_transformer = preprocessor.named_transformers_['onehot']
-    if hasattr(onehot_transformer, 'get_feature_names_out'):
-        try:
-            onehot_features = onehot_transformer.get_feature_names_out(onehot_cols)
-            feature_names.extend(onehot_features)
-        except:
-            # 대체 방법
-            for i, col in enumerate(onehot_cols):
-                if hasattr(onehot_transformer, 'categories_') and i < len(onehot_transformer.categories_):
-                    categories = onehot_transformer.categories_[i]
-                    for cat in categories:
-                        feature_names.append(f"{col}_{cat}")
-    else:
-        # 구버전 호환성
-        for i, col in enumerate(onehot_cols):
-            if hasattr(onehot_transformer, 'categories_') and i < len(onehot_transformer.categories_):
-                categories = onehot_transformer.categories_[i]
-                for cat in categories:
-                    feature_names.append(f"{col}_{cat}")
-    
-    # Ordinal 인코딩된 컬럼
-    feature_names.extend(ordinal_cols)
-    
-    return feature_names
+    return preprocessor, cb_model, lgb_model, xgb_model, onehot_cols, ordinal_cols, X_train_processed, X_val_processed, y_train, y_val
 
 
 def analyze_model_performance(models, X_val, y_val, model_names=None):
@@ -718,7 +696,6 @@ def compare_feature_importance(models, feature_names, top_n=15):
             print(f"  - {feature}")
 
 
-
 def save_model_analysis(models, X_val, y_val, feature_names, preprocessor, 
                         num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt'):
     """모델 분석 결과를 텍스트 파일로 저장하는 함수"""
@@ -826,13 +803,11 @@ if __name__ == "__main__":
     ]
     target_col = 'loan_paid_back'
     
-    preprocessor, cb_model, lgb_model, xgb_model, feature_names, onehot_cols, ordinal_cols = main(
+    preprocessor, cb_model, lgb_model, xgb_model, onehot_cols, ordinal_cols, X_train_processed, X_val_processed, y_train, y_val = main(
         df_train, target_col, num_cols, cat_cols
     )
-    
     # 모델 분석 수행
     models = {'catboost': cb_model, 'LightGBM': lgb_model, 'XGBoost': xgb_model}
-    X_train_processed, X_val_processed, y_train, y_val, _ = prepare_data(df_train, target_col, num_cols, cat_cols)
     
     print("\n" + "="*80)
     print("🔍 모델 상세 분석 시작")
@@ -848,8 +823,8 @@ if __name__ == "__main__":
     # visualize_feature_importance(models, feature_names, top_n=20)
     
     # 4. 분석 결과를 파일로 저장
-    save_model_analysis(models, X_val_processed, y_val, feature_names, preprocessor,
-                       num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt')
+    # save_model_analysis(models, X_val_processed, y_val, feature_names, preprocessor,
+    #                    num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt')
     
     # 테스트 데이터 예측 및 제출 파일 생성
     X_test_final_processed = preprocessor.transform(df_test)

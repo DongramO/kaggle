@@ -51,8 +51,8 @@ Ordinal Feature (4개): education_level, employment_status, grade_subgrade, head
 ================================================================================
 
 🔹 catboost 모델
-   Accuracy: 0.9045
-   ROC-AUC:  0.9197
+   Accuracy: 0.9046
+   ROC-AUC:  0.9200
 
    Classification Report:
               precision    recall  f1-score   support
@@ -85,11 +85,11 @@ weighted avg       0.90      0.90      0.90    118799
    Classification Report:
               precision    recall  f1-score   support
 
-    Not Paid       0.88      0.61      0.72     23997
+    Not Paid       0.88      0.60      0.72     23997
         Paid       0.91      0.98      0.94     94802
 
     accuracy                           0.90    118799
-   macro avg       0.89      0.79      0.83    118799
+   macro avg       0.90      0.79      0.83    118799
 weighted avg       0.90      0.90      0.90    118799
 
 ================================================================================
@@ -98,36 +98,36 @@ weighted avg       0.90      0.90      0.90    118799
 
 🔹 catboost - 전체 Features (30개):
 --------------------------------------------------------------------------------
-    1.    ordinal__employment_status_grade_subgrade          :    25.8753
-    2.    num__debt_to_income_ratio                          :    21.7711
-    3.    num__credit_score                                  :    16.2183
-    4.    ordinal__employment_status                         :    11.3980
-    5.    num__credit_div_ratio                              :     6.7879
-    6.    ordinal__head_grade                                :     2.7994
-    7.    num__annual_income                                 :     2.3942
-    8.    num__loan_amount                                   :     2.2323
-    9.    num__interest_rate                                 :     2.1894
-   10.    num__loan_amount_div_ratio                         :     1.3791
-   11.    num__interest_rate_to_dti                          :     1.2081
-   12.    ordinal__grade_subgrade                            :     1.1925
-   13.    num__loan_amount_div_income                        :     1.1874
-   14.    num__loan_amount_credit                            :     0.9266
-   15.    ordinal__education_level                           :     0.6957
-   16.    onehot__loan_purpose_Home                          :     0.2409
-   17.    onehot__loan_purpose_Debt consolidation            :     0.2201
-   18.    onehot__loan_purpose_Education                     :     0.1809
-   19.    onehot__loan_purpose_Medical                       :     0.1666
-   20.    onehot__marital_status_Single                      :     0.1462
-   21.    onehot__gender_Male                                :     0.1451
-   22.    onehot__loan_purpose_Other                         :     0.1152
-   23.    onehot__marital_status_Married                     :     0.1107
-   24.    onehot__gender_Female                              :     0.0920
-   25.    onehot__loan_purpose_Car                           :     0.0851
-   26.    onehot__loan_purpose_Business                      :     0.0609
-   27.    onehot__marital_status_Divorced                    :     0.0530
-   28.    onehot__gender_Other                               :     0.0475
-   29.    onehot__marital_status_Widowed                     :     0.0419
-   30.    onehot__loan_purpose_Vacation                      :     0.0385
+    1.    ordinal__employment_status_grade_subgrade          :    26.4913
+    2.    num__debt_to_income_ratio                          :    21.5985
+    3.    num__credit_score                                  :    16.0662
+    4.    ordinal__employment_status                         :    12.0739
+    5.    num__credit_div_ratio                              :     6.3753
+    6.    ordinal__head_grade                                :     2.8513
+    7.    num__loan_amount                                   :     2.6592
+    8.    num__annual_income                                 :     2.5094
+    9.    num__interest_rate                                 :     2.2747
+   10.    num__interest_rate_to_dti                          :     1.2564
+   11.    ordinal__grade_subgrade                            :     1.1750
+   12.    num__loan_amount_div_ratio                         :     1.0368
+   13.    num__loan_amount_div_income                        :     1.0122
+   14.    num__loan_amount_credit                            :     0.7244
+   15.    ordinal__education_level                           :     0.6061
+   16.    onehot__gender_Female                              :     0.2283
+   17.    onehot__loan_purpose_Education                     :     0.1475
+   18.    onehot__loan_purpose_Other                         :     0.1194
+   19.    onehot__loan_purpose_Medical                       :     0.1116
+   20.    onehot__marital_status_Married                     :     0.0985
+   21.    onehot__loan_purpose_Home                          :     0.0977
+   22.    onehot__loan_purpose_Debt consolidation            :     0.0976
+   23.    onehot__marital_status_Single                      :     0.0782
+   24.    onehot__loan_purpose_Car                           :     0.0710
+   25.    onehot__marital_status_Widowed                     :     0.0527
+   26.    onehot__marital_status_Divorced                    :     0.0461
+   27.    onehot__loan_purpose_Business                      :     0.0443
+   28.    onehot__gender_Other                               :     0.0428
+   29.    onehot__loan_purpose_Vacation                      :     0.0354
+   30.    onehot__gender_Male                                :     0.0180
 
 🔹 LightGBM - 전체 Features (30개):
 --------------------------------------------------------------------------------
@@ -164,34 +164,34 @@ weighted avg       0.90      0.90      0.90    118799
 
 🔹 XGBoost - 전체 Features (30개):
 --------------------------------------------------------------------------------
-    1.    ordinal__employment_status                         :     0.6948
-    2.    ordinal__employment_status_grade_subgrade          :     0.1616
-    3.    num__credit_div_ratio                              :     0.0441
-    4.    ordinal__grade_subgrade                            :     0.0199
-    5.    num__credit_score                                  :     0.0135
-    6.    num__interest_rate_to_dti                          :     0.0116
-    7.    num__debt_to_income_ratio                          :     0.0115
-    8.    ordinal__head_grade                                :     0.0095
-    9.    num__loan_amount_div_ratio                         :     0.0030
-   10.    num__interest_rate                                 :     0.0020
-   11.    num__loan_amount                                   :     0.0019
-   12.    onehot__loan_purpose_Home                          :     0.0019
-   13.    onehot__loan_purpose_Education                     :     0.0019
-   14.    num__annual_income                                 :     0.0018
-   15.    ordinal__education_level                           :     0.0016
-   16.    num__loan_amount_credit                            :     0.0016
-   17.    onehot__loan_purpose_Medical                       :     0.0015
-   18.    num__loan_amount_div_income                        :     0.0014
-   19.    onehot__gender_Female                              :     0.0014
-   20.    onehot__loan_purpose_Debt consolidation            :     0.0014
-   21.    onehot__loan_purpose_Other                         :     0.0014
-   22.    onehot__loan_purpose_Business                      :     0.0013
-   23.    onehot__gender_Other                               :     0.0013
-   24.    onehot__loan_purpose_Vacation                      :     0.0012
-   25.    onehot__marital_status_Divorced                    :     0.0012
+    1.    ordinal__employment_status                         :     0.7035
+    2.    ordinal__employment_status_grade_subgrade          :     0.1575
+    3.    num__credit_div_ratio                              :     0.0419
+    4.    ordinal__grade_subgrade                            :     0.0193
+    5.    num__credit_score                                  :     0.0132
+    6.    num__interest_rate_to_dti                          :     0.0114
+    7.    num__debt_to_income_ratio                          :     0.0110
+    8.    ordinal__head_grade                                :     0.0097
+    9.    num__loan_amount_div_ratio                         :     0.0032
+   10.    num__loan_amount                                   :     0.0019
+   11.    onehot__loan_purpose_Education                     :     0.0019
+   12.    num__interest_rate                                 :     0.0018
+   13.    onehot__loan_purpose_Home                          :     0.0018
+   14.    num__annual_income                                 :     0.0017
+   15.    num__loan_amount_credit                            :     0.0015
+   16.    ordinal__education_level                           :     0.0015
+   17.    onehot__loan_purpose_Medical                       :     0.0014
+   18.    onehot__loan_purpose_Business                      :     0.0014
+   19.    onehot__loan_purpose_Other                         :     0.0014
+   20.    num__loan_amount_div_income                        :     0.0013
+   21.    onehot__loan_purpose_Debt consolidation            :     0.0013
+   22.    onehot__marital_status_Divorced                    :     0.0012
+   23.    onehot__loan_purpose_Vacation                      :     0.0012
+   24.    onehot__loan_purpose_Car                           :     0.0012
+   25.    onehot__gender_Male                                :     0.0012
    26.    onehot__marital_status_Married                     :     0.0012
-   27.    onehot__loan_purpose_Car                           :     0.0012
-   28.    onehot__marital_status_Widowed                     :     0.0012
-   29.    onehot__marital_status_Single                      :     0.0011
-   30.    onehot__gender_Male                                :     0.0011
+   27.    onehot__gender_Other                               :     0.0012
+   28.    onehot__gender_Female                              :     0.0011
+   29.    onehot__marital_status_Widowed                     :     0.0010
+   30.    onehot__marital_status_Single                      :     0.0010
 
