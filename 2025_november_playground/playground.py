@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from catboost import CatBoostClassifier
+from category_encoders import CatBoostEncoder
 import lightgbm as lgb
 import xgboost as xgb
 from scipy.optimize import minimize
@@ -209,7 +210,7 @@ def data_preprocessing(df_array, target_col, df_num_cols, df_cat_cols):
         for df in df_array:
 
             df["loan_amount"] = np.log1p(df["loan_amount"])
-            df["interest_rate"] = np.log1p(df["interest_rate"])
+            # df["interest_rate"] = np.log1p(df["interest_rate"])
             df["annual_income"] = np.log1p(df["annual_income"])    
         
         return df_array
@@ -230,21 +231,48 @@ def data_preprocessing(df_array, target_col, df_num_cols, df_cat_cols):
                 
         return df_array
 
+    def remove_data_identify(df_array):
+        
+        for df in df_array:
+            df.drop(columns=['id'], inplace=True)
+        
+        return df_array
+
     def feature_engineering(df_array):
         
         eps = 1e-6
-        
+        clip_rules = {
+            "annual_income": 0.995,
+            "loan_amount": 0.995,
+            "debt_to_income_ratio": 0.99,
+            "interest_rate": 0.995,
+            "credit_score": 0.99
+        }
+
         for df in df_array:
+            for col, q in clip_rules.items():
+                upper = df[col].quantile(q)
+
+                if col == "credit_score":
+                    lower = df[col].quantile(1 - q)
+                    df[col] = df[col].clip(lower=lower, upper=upper)
+                else:
+                    df[col] = df[col].clip(upper=upper)
+
+            df["annual_income"] = df["annual_income"].clip(lower=eps)
+            df["loan_amount"]   = df["loan_amount"].clip(lower=eps)
+            df["interest_rate"] = df["interest_rate"].clip(lower=eps)
+            df["credit_score"]  = df["credit_score"].clip(lower=300)
             # 1. interest_rate / debt_to_income_ratio
-            df["interest_rate_to_dti"] = df["interest_rate"] / (df["debt_to_income_ratio"] + eps)
+            df["dti_to_interest_rate"] = (df["debt_to_income_ratio"] / (df["interest_rate"]+ eps))
             
             # 2. education_level & loan_purpose
-            df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
+            # df["loan_purpose_interest_rate"] = df["loan_purpose"].astype(str) + "_" + np.log1p(df["interest_rate"].round(1)).astype(str)
             
             # 3. employment_status & loan_purpose
-            df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
+            # df['employment_status_grade_subgrade'] = df['employment_status'].astype(str) + '_' + df['grade_subgrade'].astype(str)
             df["employment_loan_purpose"] = df["employment_status"].astype(str) + "_" + df["loan_purpose"].astype(str)
-            df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
+            # df["education_loan_purpose"] = df["education_level"].astype(str) + "_" + df["loan_purpose"].astype(str)
 
             # 4. monthly_income 
             df["monthly_income"] = df["annual_income"] / 12
@@ -258,17 +286,28 @@ def data_preprocessing(df_array, target_col, df_num_cols, df_cat_cols):
             df["head_grade"] = df["grade_subgrade"].astype(str).str.split('_').str[0]
             
             # 6. loan_amount_div
-            df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ eps)
-            df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ eps)
-            df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ eps)
+            # df["loan_amount_credit"] = df["loan_amount"].astype(float) / (df["credit_score"].astype(float)+ eps)
+            # df["loan_amount_div_income"] = df["loan_amount"].astype(int) / (df["annual_income"].astype(float)+ eps)
+            # df["loan_amount_div_ratio"] = df["loan_amount"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ eps)
             
             # 7. creadit
             df["credit_div_ratio"] = df["credit_score"].astype(float) / (df["debt_to_income_ratio"].astype(float)+ eps)
 
-    
+            ratio_cols = [
+                "dti_to_interest_rate",
+                "debt_to_monthly_income",
+                "pti_ratio",
+                "credit_div_ratio",
+            ]
+
+            for col in ratio_cols:
+                upper = df[col].quantile(0.995)
+                df[col] = df[col].clip(lower=0, upper=upper)
+
         return df_array
 
-    # df_array = log_regularization(df_array)
+    df_array = remove_data_identify(df_array)
+    df_array = log_regularization(df_array)
     df_array = feature_engineering(df_array)
     # df_array = remove_outliers(df_array, df_num_cols)
     return df_array
@@ -278,46 +317,119 @@ def encoding_data(df_train, target_col, model_type, X, y,X_train, X_val, y_train
     df_num_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
     df_cat_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
     
+    education_order = [
+        "High School",
+        "Other",
+        "Bachelor's",
+        "Master's",
+        "PhD",
+    ]
 
-    # 순서가 없는 범주형 변수들 onehot encoding
-    onehot_cols = [
-                    'gender',
-                    'marital_status',
-                    'loan_purpose',
-                #    'employment_loan_purpose',
-                #    'education_loan_purpose',
-                ]
+    grade_order = [
+        'G5','G4','G3','G2','G1',
+        'F5','F4','F3','F2','F1',
+        'E5','E4','E3','E2','E1',
+        'D5','D4','D3','D2','D1',
+        'C5','C4','C3','C2','C1',
+        'B5','B4','B3','B2','B1',
+        'A5','A4','A3','A2','A1',
+    ]
+
+    head_grade_order = ['G', 'F', 'E', 'D', 'C', 'B', 'A']
+
+  
+    # encoder.fit(X_train, y_train)
+
     
-    # 순서가 있는 범주형 변수들 ordinal encoding
-    ordinal_cols = [
-                    'education_level',
-                    'employment_status',
-                    'grade_subgrade',
-                    'head_grade',
-                    'employment_status_grade_subgrade',
-                    ]
-    
+    # num_transformer = 'passthrough'
     num_transformer = StandardScaler()
-    onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-    ordinal_transformer = OrdinalEncoder()
     
-    preprocessor_list = []
-    preprocessor = None
+    if model_type == "catboost":
+        cat_cat_transformer = OrdinalEncoder(
+            handle_unknown='use_encoded_value',
+            unknown_value=-1)
+        cat_cat_cols = [
+            'education_level',
+            'grade_subgrade',
+            'head_grade',
+            'gender',
+            'marital_status',
+            'loan_purpose',
+            'employment_status',    
+            'employment_loan_purpose',
+            # 'employment_status_grade_subgrade',
+        ]
+    elif model_type == "lgbm":
+        lgbm_onehot_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+        lgbm_one_cols = [
+            'gender',
+            'marital_status',
+            'loan_purpose',
+            # 'employment_status',    
+            'employment_loan_purpose',
+        ]
+        lgbm_ordinal_transformer = OrdinalEncoder(handle_unknown='use_encoded_value', 
+          categories=[
+                education_order,
+                grade_order,
+                head_grade_order,
+            ],
+            unknown_value=-1)
+        lgbm_ordinal_cols = [
+            'education_level',
+            'grade_subgrade',
+            'head_grade',
+        ]
+        lgbm_cb_cols = [
+            'employment_status',
+            'employment_loan_purpose',
+            # 'employment_status_grade_subgrade',
+        ]
+        lgbm_cb_encoder = CatBoostEncoder(
+            return_df=False,
+            random_state=rs,
+            cols=lgbm_cb_cols,
+        )
+       
+    elif model_type == "xgb":
+        xgb_cat_transformer = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+        
+        xgb_cat_cols = [
+            'gender',
+            'marital_status',
+            'loan_purpose',
+            # 'employment_status',    
+            'employment_loan_purpose',
+        ]
+
+        xgb_cb_cols = [
+            'employment_status',
+            'employment_loan_purpose',
+            # 'employment_status_grade_subgrade',
+        ]
+        xgb_cb_encoder = CatBoostEncoder(
+            return_df=False,
+            random_state=rs,
+            cols=xgb_cb_cols,
+        )
+      
+
     if model_type == "catboost":
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', num_transformer, df_num_cols),
-                # ('cat', onehot_transformer, onehot_cols),
-                # ('ordinal', ordinal_transformer, ordinal_cols)
+                ('cat', cat_cat_transformer, cat_cat_cols),
+                
             ],
-            remainder='drop'  
+            remainder='drop'
         )
     elif model_type == "lgbm":
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', num_transformer, df_num_cols),
-                # ('onehot', onehot_transformer, onehot_cols),
-                ('ordinal', ordinal_transformer, ordinal_cols)
+                ('onehot', lgbm_onehot_transformer, lgbm_one_cols),
+                ('ordinal', lgbm_ordinal_transformer, lgbm_ordinal_cols),
+                ('catboost', lgbm_cb_encoder, lgbm_cb_cols),
             ],
             remainder='drop'  
         )
@@ -325,26 +437,26 @@ def encoding_data(df_train, target_col, model_type, X, y,X_train, X_val, y_train
         preprocessor = ColumnTransformer(
             transformers=[
                 ('num', num_transformer, df_num_cols),
-                # ('onehot', onehot_transformer, onehot_cols),
-                # ('ordinal', ordinal_transformer, ordinal_cols)
+                ('cat', xgb_cat_transformer, xgb_cat_cols),
+                ('catboost', xgb_cb_encoder, xgb_cb_cols),
             ],
             remainder='drop'  
         )
-    else:
-        raise ValueError(f"Invalid model type: {model_type}")
-                                
-    X_train_processed = preprocessor.fit_transform(X_train)
-    X_val_processed = preprocessor.transform(X_val)
-    
-    
+   
 
+    X_train_processed = preprocessor.fit_transform(X_train, y_train)
+    X_val_processed = preprocessor.transform(X_val)
+ 
     return [X_train_processed, X_val_processed, y_train, y_val, preprocessor]
 
 
-def optimize_models(X_train, y_train, model_type):
+def optimize_models(X_train, y_train, model_type, cat_features=None):
+
+    pos = (df_train['loan_paid_back'] == 1).sum()
+    neg = (df_train['loan_paid_back'] == 0).sum()
+    spw = neg / pos
+
     def objective(trial):
-        # model_type = trial.suggest_categorical("model", ["logistic", "lgbm", "xgb"])
-        
         if model_type == "catboost":
             params = {
                 "iterations": trial.suggest_int("iterations", 100, 500),
@@ -361,20 +473,26 @@ def optimize_models(X_train, y_train, model_type):
         
         elif model_type == "lgbm":
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 100, 800),
-                "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.05, log=True),
+                "objective": "binary",
+                "boosting_type": "gbdt",
+                "n_estimators": trial.suggest_int("n_estimators", 300, 900),
+                "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
                 "num_leaves": trial.suggest_int("num_leaves", 31, 255),
-                "max_depth": trial.suggest_int("max_depth", 4, 15),
+                "max_depth": trial.suggest_int("max_depth", -1, 12),
+                "min_child_samples": trial.suggest_int("min_child_samples", 20, 200),
+                "min_split_gain": trial.suggest_float("min_split_gain", 0.0, 1.0),
                 "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+                "subsample_freq": trial.suggest_int("subsample_freq", 0, 5),
                 "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
                 "random_state": rs,
-                "verbose": -1,
+                "n_jobs": -1,
+                "metric": "auc",
             }
             model = lgb.LGBMClassifier(**params)
         
-        else:  # XGBoost
+        else:  
             params = {
                 "n_estimators": trial.suggest_int("n_estimators", 300, 800),
                 "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.05, log=True),
@@ -386,15 +504,15 @@ def optimize_models(X_train, y_train, model_type):
                 "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
                 "random_state": rs,
+                'scale_pos_weight': spw,
                 # "use_label_encoder": False,
                 "eval_metric": "auc",
             }
             model = xgb.XGBClassifier(**params)
         
         # k-fold를 통해 학습할 수 있도록 객체 생성
-        cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=rs)
-        
-        # 교차 검증을 통해 성능 점수 계산
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=rs)
+
         scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="roc_auc", n_jobs=-1)
         return np.mean(scores)
 
@@ -408,19 +526,23 @@ def optimize_models(X_train, y_train, model_type):
     print(study.best_trial.params)
     return study.best_trial.params
 
-def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
+def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params, cat_features=None):
     """Optuna 최적화 또는 고정 파라미터로 모델 생성"""
+    pos = (df_train['loan_paid_back'] == 1).sum()
+    neg = (df_train['loan_paid_back'] == 0).sum()
+    spw = neg / pos
+
     if use_fixed_params:
         # 고정 파라미터 사용
         if model_type == "catboost":
             fixed_params = {
                 "loss_function": "Logloss",
                 "eval_metric": "AUC",
-                "iterations": 475,
-                "learning_rate": 0.09983620901362981,
-                'l2_leaf_reg': 15.332725842146589,
-                'random_strength': 0.7485180520264623,
-                "depth": 7,
+                "depth": 8,
+                "iterations": 477,
+                "l2_leaf_reg": 77.30156271338825,
+                "learning_rate": 0.08217342500676761,
+                "random_strength": 0.6335140795029303,
                 "random_seed": rs,
                 "verbose": False,
             }
@@ -428,31 +550,39 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
             
         elif model_type == "lgbm":
             fixed_params = {
-                "colsample_bytree": 0.5295722198581925,
-                "learning_rate": 0.04919972117020984,
-                "max_depth": 8,
-                "n_estimators": 576,
-                "num_leaves": 93,
-                "reg_alpha": 9.320749906598678,
-                "reg_lambda": 0.045393254289234894,
-                "subsample": 0.8368214696612971,
+                "objective": "binary",
+                "boosting_type": "gbdt",
+                "colsample_bytree": 0.7689967650165342,
+                "learning_rate": 0.0903227448273408,
+                "max_depth": 7,
+                "min_child_samples": 105,
+                "min_split_gain": 0.8904577433341123,
+                "n_estimators": 841,
+                "num_leaves": 84,
+                "reg_alpha": 0.01946164724781516,
+                "reg_lambda": 3.665810648369544,
+                "subsample": 0.9127034245997915,
+                "subsample_freq": 1,
                 "random_state": rs,
+                "n_jobs": -1,
+                "metric": "auc",
                 "verbose": -1,
             }
             model = lgb.LGBMClassifier(**fixed_params)
             
         elif model_type == "xgb":
             fixed_params = {
-                "colsample_bytree": 0.9738845151688945,
-                "gamma": 0.6097633807345567,
-                "learning_rate": 0.03398329815843991,
+                "colsample_bytree": 0.6059606379994678,
+                "gamma": 0.861757820514575,
+                "learning_rate": 0.04114729921642164,
                 "max_depth": 7,
-                "min_child_weight": 5,
-                "n_estimators": 690,
-                "reg_alpha": 4.931603458294555,
-                "reg_lambda": 0.14289737491259996,
-                "subsample": 0.7574655551921472,
+                "min_child_weight": 8,
+                "n_estimators": 639,
+                "reg_alpha": 3.568274751351765,
+                "reg_lambda": 0.014158740787660969,
+                "subsample": 0.8489898860887624,
                 "random_state": rs,
+                "scale_pos_weight": spw,
                 "eval_metric": "auc",
             }
             model = xgb.XGBClassifier(**fixed_params)
@@ -463,7 +593,7 @@ def create_models_with_optuna(X_train, y_train, model_type, use_fixed_params):
     else:
         try:
             print(f"\n🚀 {model_type.upper()} 최적화 시작...")
-            best_params = optimize_models(X_train, y_train, model_type)
+            best_params = optimize_models(X_train, y_train, model_type, cat_features=cat_features)
             
             # 최적 파라미터 재확인 출력
             print(f"✅ {model_type.upper()} 최종 사용 파라미터:")
@@ -499,9 +629,9 @@ def find_optimal_weights(models, preprocessor_list):
     
     # 각 모델의 전처리된 validation set 가져오기
     # preprocessor_list 구조: [X_train, X_val, y_train, y_val, preprocessor]
-    X_val_catboost = preprocessor_list[0][1]  # catboost용 전처리된 validation set
-    X_val_lgbm = preprocessor_list[1][1]      # lgbm용 전처리된 validation set
-    X_val_xgb = preprocessor_list[2][1]       # xgb용 전처리된 validation set
+    X_val_lgbm = preprocessor_list[0][1]      # lgbm용 전처리된 validation set
+    X_val_xgb = preprocessor_list[1][1]       # xgb용 전처리된 validation set
+    X_val_catboost = preprocessor_list[2][1]  # catboost용 전처리된 validation set
     y_val = preprocessor_list[0][3]           # 모든 모델의 y_val은 동일
     
     # 각 모델에 맞는 전처리된 validation set으로 예측
@@ -509,17 +639,53 @@ def find_optimal_weights(models, preprocessor_list):
     lgb_pred = lgb_model.predict_proba(X_val_lgbm)[:, 1]
     xgb_pred = xgb_model.predict_proba(X_val_xgb)[:, 1]
     
+    # 각 모델의 개별 성능 확인
+    cb_loss = log_loss(y_val, cb_pred)
+    lgb_loss = log_loss(y_val, lgb_pred)
+    xgb_loss = log_loss(y_val, xgb_pred)
+    
+    cb_auc = roc_auc_score(y_val, cb_pred)
+    lgb_auc = roc_auc_score(y_val, lgb_pred)
+    xgb_auc = roc_auc_score(y_val, xgb_pred)
+    
+    print("\n" + "="*80)
+    print("📊 각 모델의 개별 성능 (Validation Set)")
+    print("="*80)
+    print(f"CatBoost  - LogLoss: {cb_loss:.6f}, AUC: {cb_auc:.6f}")
+    print(f"LightGBM  - LogLoss: {lgb_loss:.6f}, AUC: {lgb_auc:.6f}")
+    print(f"XGBoost   - LogLoss: {xgb_loss:.6f}, AUC: {xgb_auc:.6f}")
+    
+    # 모델들 간의 예측 상관관계 확인
+    preds_dict = {
+        'CatBoost': cb_pred,
+        'LightGBM': lgb_pred,
+        'XGBoost': xgb_pred
+    }
+    preds_df = pd.DataFrame(preds_dict)
+    corr_matrix = preds_df.corr()
+    
+    print("\n" + "="*80)
+    print("📈 모델들 간의 예측 상관관계")
+    print("="*80)
+    print(corr_matrix.round(4))
+    
     preds = np.vstack([cb_pred, lgb_pred, xgb_pred]).T  # shape: (N, 3)
 
-    # 초기값 (균등분배)
-    init_w = np.array([1/3, 1/3, 1/3])
+    # 성능 기반 초기 weight 설정 (LogLoss가 낮을수록 높은 weight)
+    losses = np.array([cb_loss, lgb_loss, xgb_loss])
+    # LogLoss를 역수로 변환하여 weight로 사용 (정규화)
+    inv_losses = 1.0 / (losses + 1e-10)  # 0으로 나누기 방지
+    init_w = inv_losses / inv_losses.sum()
+    
+    print(f"\n초기 weight (성능 기반) - CatBoost: {init_w[0]:.4f}, LightGBM: {init_w[1]:.4f}, XGBoost: {init_w[2]:.4f}")
 
     # 제약조건: w >= 0, sum(w)=1
     constraints = ({
         'type': 'eq',
         'fun': lambda w: np.sum(w) - 1
     })
-    min_w = 0.1
+    # 최소 weight 제약 추가 (각 모델이 최소 5% 이상 기여하도록)
+    min_w = 0.05
     bounds = [(min_w, 1)] * 3
 
     # 목적 함수: logloss 최소화
@@ -531,7 +697,15 @@ def find_optimal_weights(models, preprocessor_list):
                       bounds=bounds, constraints=constraints)
 
     optimal_w = result.x
-    print(f"Optimal weights - CatBoost: {optimal_w[0]:.4f}, LightGBM: {optimal_w[1]:.4f}, XGBoost: {optimal_w[2]:.4f}")
+    print(f"\n✅ 최적 weight - CatBoost: {optimal_w[0]:.4f}, LightGBM: {optimal_w[1]:.4f}, XGBoost: {optimal_w[2]:.4f}")
+    
+    # 최적 weight로 앙상블 성능 확인
+    ensemble_pred = np.dot(preds, optimal_w)
+    ensemble_loss = log_loss(y_val, ensemble_pred)
+    ensemble_auc = roc_auc_score(y_val, ensemble_pred)
+    print(f"앙상블 성능 - LogLoss: {ensemble_loss:.6f}, AUC: {ensemble_auc:.6f}")
+    print("="*80 + "\n")
+    
     return optimal_w
 
 def ensemble_predict(models, preprocessed_X_list, weights):
@@ -540,10 +714,10 @@ def ensemble_predict(models, preprocessed_X_list, weights):
     lgb_model = models['lgbm']
     xgb_model = models['xgb']
     
-    X_catboost = preprocessed_X_list[0]  # catboost용 전처리된 데이터
-    X_lgbm = preprocessed_X_list[1]      # lgbm용 전처리된 데이터
-    X_xgb = preprocessed_X_list[2]       # xgb용 전처리된 데이터
-    
+    X_lgbm = preprocessed_X_list[0]      # lgbm용 전처리된 데이터
+    X_xgb = preprocessed_X_list[1]       # xgb용 전처리된 데이터
+    X_catboost = preprocessed_X_list[2]  # catboost용 전처리된 데이터
+
     # 각 모델에 맞는 전처리된 데이터로 예측
     # predict_proba가 1차원 배열을 반환할 수 있으므로 안전하게 처리
     def safe_predict_proba(model, X):
@@ -569,61 +743,221 @@ def ensemble_predict(models, preprocessed_X_list, weights):
     
     return ensemble_pred, ensemble_pred_proba
 
-def train_catboost(model, X_train, X_val, y_train, y_val):
+def optimize_weights_random_search(models, X_val_list, y_val, n_trials=3000):
+    """
+    무작위 가중치 조합을 3000번 시도하여 AUC가 가장 높은 조합을 찾습니다.
+    X_val_list: 각 모델별로 전처리된 X_val 데이터의 리스트 [X_cat, X_lgbm, X_xgb]
+    """
+    print(f"\n⚖️ Optimizing Ensemble Weights (Random Search {n_trials} trials)...")
+    model_order = ['lgbm', 'xgb', 'catboost']
+
+    # 각 모델의 예측값 미리 계산 (속도 향상)
+    preds_list = []
+    for model_name in model_order:
+        model = models[model_name]
+        preds_list.append(model.predict_proba(X_val_list[model_order.index(model_name)])[:, 1])
     
-    possible_cat_cols = [
-        'gender', 'marital_status', 'education_level', 'employment_status',
-        'loan_purpose', 'grade_subgrade', 'head_grade',
-        'employment_status_grade_subgrade',
-        'loan_purpose_interest_rate',
-        'employment_status_grade_subgrade',
-        'employment_loan_purpose',
-        'education_loan_purpose',
-        'head_grade'
-    ]
-    cat_cols = [col for col in possible_cat_cols if col in X_train.columns]
+    best_auc = 0
+    best_weights = [0.33, 0.33, 0.33]
     
-    # model = CatBoostClassifier(
-    #     loss_function='Logloss',
-    #     eval_metric='AUC',
-    #     random_seed=rs,
-    #     verbose=False
-    # )
+    for _ in range(n_trials):
+        # 랜덤 가중치 생성 (Dirichlet 분포 사용 시 합이 1이 됨)
+        weights = np.random.dirichlet(np.ones(len(models)), size=1)[0]
+        
+        # 가중 평균 계산
+        final_pred = np.zeros_like(preds_list[0])
+        for i, pred in enumerate(preds_list):
+            final_pred += pred * weights[i]
+            
+        score = roc_auc_score(y_val, final_pred)
+        if score > best_auc:
+            best_auc = score
+            best_weights = weights
+            
+    print(f"✅ Optimal Weights Found: {best_weights}")
+    print(f"✅ Best Validation AUC: {best_auc:.5f}")
+    return best_weights
+
+# def ensemble_predict(models, X_list, weights):
+#     model_order = ['lgbm', 'xgb', 'catboost']
+#     final_pred_proba = np.zeros(X_list[0].shape[0])
+
+#     for i, model_name in enumerate(model_order):
+#         model = models[model_name]
+#         pred = model.predict_proba(X_list[i])[:, 1]
+#         final_pred_proba += pred * weights[i]
+        
+#     final_pred = (final_pred_proba >= 0.3).astype(float)
+#     return final_pred, final_pred_proba
+
+def analyze_feature_importance(models, preprocessor_list, top_n=20):
+    """
+    각 모델별로 feature importance를 분석하고 시각화하는 함수
     
-    model.fit(
-        X_train,
-        y_train,
-        cat_features=cat_cols,          # 여기서만 cat_features 사용
-        eval_set=(X_val, y_val),
-        use_best_model=True
-    )
+    Parameters:
+    -----------
+    models : dict
+        학습된 모델 딕셔너리 {'lgbm': model, 'xgb': model, 'catboost': model}
+    preprocessor_list : list
+        각 모델별 전처리기 리스트
+    top_n : int
+        상위 N개 feature만 표시 (기본값: 20)
+    """
+    print("\n" + "="*80)
+    print("📊 모델별 Feature Importance 분석")
+    print("="*80)
     
-    return model
+    model_types = ["lgbm", "xgb", "catboost"]
+    all_importances = {}
+    
+    for idx, model_name in enumerate(model_types):
+        model = models[model_name]
+        preprocessor = preprocessor_list[idx][4]  # preprocessor 객체
+        feature_names = preprocessor.get_feature_names_out()
+        
+        # 모델별로 feature importance 추출
+        if model_name == "catboost":
+            importances = model.get_feature_importance()
+        elif model_name == "lgbm":
+            importances = model.feature_importances_
+        elif model_name == "xgb":
+            importances = model.feature_importances_
+        else:
+            importances = None
+        
+        if importances is not None:
+            # DataFrame으로 변환
+            importance_df = pd.DataFrame({
+                'feature': feature_names,
+                'importance': importances
+            }).sort_values('importance', ascending=False)
+            
+            all_importances[model_name] = importance_df
+            
+            # 상위 N개 출력
+            print(f"\n🔹 {model_name.upper()} - Top {top_n} Features:")
+            print("-" * 80)
+            for i, row in importance_df.head(top_n).iterrows():
+                print(f"  {row['feature']:50s} : {row['importance']:10.4f}")
+    
+    # 시각화
+    visualize_feature_importance(all_importances, top_n=top_n)
+    
+    # 공통 중요 feature 찾기
+    find_common_important_features(all_importances, top_n=top_n)
+    
+    return all_importances
+
+def visualize_feature_importance(all_importances, top_n=20, figsize=(15, 12)):
+    """
+    모델별 feature importance를 시각화
+    """
+    n_models = len(all_importances)
+    fig, axes = plt.subplots(n_models, 1, figsize=figsize)
+    
+    if n_models == 1:
+        axes = [axes]
+    
+    for idx, (model_name, importance_df) in enumerate(all_importances.items()):
+        top_features = importance_df.head(top_n)
+        
+        # 수평 막대 그래프
+        axes[idx].barh(range(len(top_features)), top_features['importance'].values, color='crimson')
+        axes[idx].set_yticks(range(len(top_features)))
+        axes[idx].set_yticklabels(top_features['feature'].values)
+        axes[idx].set_xlabel('Feature Importance', fontsize=12)
+        axes[idx].set_title(f'{model_name.upper()} - Top {top_n} Feature Importance', fontsize=14, fontweight='bold')
+        axes[idx].invert_yaxis()
+        axes[idx].grid(axis='x', alpha=0.3)
+        
+        # 값 표시
+        for i, v in enumerate(top_features['importance'].values):
+            axes[idx].text(v, i, f' {v:.2f}', va='center', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
+    print(f"\n✅ Feature importance 시각화가 'feature_importance.png'로 저장되었습니다.")
+
+def find_common_important_features(all_importances, top_n=20):
+    """
+    모든 모델에서 공통으로 중요하게 판단하는 feature 찾기
+    """
+    print("\n" + "="*80)
+    print(f"🔍 공통 중요 Feature (모든 모델에서 Top {top_n}에 포함)")
+    print("="*80)
+    
+    # 각 모델의 top N feature 집합
+    top_features_sets = {}
+    for model_name, importance_df in all_importances.items():
+        top_features = set(importance_df.head(top_n)['feature'].values)
+        top_features_sets[model_name] = top_features
+    
+    # 교집합 찾기
+    common_features = set.intersection(*top_features_sets.values())
+    
+    if common_features:
+        print(f"\n총 {len(common_features)}개의 공통 중요 feature 발견:")
+        print("-" * 80)
+        
+        # 중요도 평균 계산
+        common_importance = {}
+        for feature in common_features:
+            avg_importance = np.mean([
+                all_importances[model_name][
+                    all_importances[model_name]['feature'] == feature
+                ]['importance'].values[0]
+                for model_name in all_importances.keys()
+            ])
+            common_importance[feature] = avg_importance
+        
+        # 중요도 순으로 정렬
+        sorted_common = sorted(common_importance.items(), key=lambda x: x[1], reverse=True)
+        
+        for i, (feature, avg_imp) in enumerate(sorted_common, 1):
+            print(f"  {i:2d}. {feature:50s} : 평균 중요도 {avg_imp:10.4f}")
+    else:
+        print("\n공통 중요 feature가 없습니다.")
+    
+    # 모델별 비교 테이블
+    print("\n" + "="*80)
+    print("📈 모델별 Feature Importance 비교 (공통 feature)")
+    print("="*80)
+    
+    if common_features:
+        comparison_data = []
+        for feature in sorted_common[:10]:  # 상위 10개만
+            row = {'feature': feature[0]}
+            for model_name in all_importances.keys():
+                imp = all_importances[model_name][
+                    all_importances[model_name]['feature'] == feature[0]
+                ]['importance'].values[0]
+                row[model_name] = imp
+            row['average'] = feature[1]
+            comparison_data.append(row)
+        
+        comparison_df = pd.DataFrame(comparison_data)
+        print("\n", comparison_df.to_string(index=False))
+
 
 def main(df_array, target_col, num_cols, cat_cols):
-    
-    df_array = data_preprocessing(df_array, target_col, num_cols, cat_cols)
     
     df_train = df_array[0]
     df_test = df_array[1]
     
-    model_types = ["catboost", "lgbm", "xgb"]
+    model_types = ["lgbm", "xgb", "catboost"]
 
-    
     X = df_train.drop(columns=[target_col])
     y = df_train[target_col]
+
     
     X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=rs)
     
     preprocessor_list = []
-    preprocessor_list.append(encoding_data(df_train, target_col, model_types[1], X, y, X_train, X_val, y_train, y_val))
-    preprocessor_list.append(encoding_data(df_train, target_col, model_types[2], X, y, X_train, X_val, y_train, y_val))
-    
+    for idx, model_type in enumerate(model_types):
+        preprocessor_list.append(encoding_data(df_train, target_col, model_types[idx], X, y, X_train, X_val, y_train, y_val))
+
     model_result = []
-    cb_model = create_models_with_optuna(X_train, y_train, model_type=model_types[0], use_fixed_params=True)
-    cb_model_trained = train_catboost(cb_model, X_train, X_val, y_train, y_val)
-    model_result.append(cb_model_trained)
-    
+
     for idx, preprocessor in enumerate(preprocessor_list):
         
         X_train_processed = preprocessor[0]
@@ -634,36 +968,28 @@ def main(df_array, target_col, num_cols, cat_cols):
         
         print("🔍 Optimizing models with Optuna...")
         
-        processed_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[idx+1], use_fixed_params=True)
+        # if idx == 0:
+        #     processed_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[idx], use_fixed_params=False)
+        # else:
+        processed_model = create_models_with_optuna(X_train_processed, y_train, model_type=model_types[idx], use_fixed_params=True)
 
         feature_names = preprocessor.get_feature_names_out()
         X_train_df = pd.DataFrame(X_train_processed, columns=feature_names)
         X_val_df = pd.DataFrame(X_val_processed, columns=feature_names)
         
-        if model_types[idx+1] == "lgbm":
-            processed_model.fit(
-                X_train_df, y_train,
-                eval_set=[(X_val_df, y_val)],
-                callbacks=[
-                    lgb.early_stopping(stopping_rounds=100),
-                    lgb.log_evaluation(0)
-                ]
-            )
-        elif model_types[idx+1] == "xgb":
-            processed_model.fit(
-                X_train_processed, y_train,
-                eval_set=[(X_val_processed, y_val)],
-                verbose=False
-            )
+        processed_model.fit(X_train_df, y_train)
+
         model_result.append(processed_model)
-    
+
+    # model_result.append(cb_model_trained)
+
     models = {
         'lgbm': model_result[0],
         'xgb': model_result[1],
         'catboost': model_result[2],
     }
-    preprocessor_list.append([X_train, X_val, y_train, y_val, cb_model])
-    
+    # preprocessor_list.append([X_train, X_val, y_train, y_val, cb_model])
+
     
     for idx, (name, model) in enumerate(models.items()):
         X_val_data = preprocessor_list[idx][1]  # validation set
@@ -675,230 +1001,38 @@ def main(df_array, target_col, num_cols, cat_cols):
             
             acc = accuracy_score(y_val_data, pred)
             auc = roc_auc_score(y_val_data, proba)
+
             print(f"{name} - Accuracy: {acc:.4f}, AUC: {auc:.4f}")
+        
         except Exception as e:
             print(f"{name} - Error: {e}")
             import traceback
             traceback.print_exc()
-
+    best_weights = [1/3, 1/3, 1/3]
     try:
         # 각 모델의 전처리된 validation set 가져오기
-        X_val_list = [preprocessor_list[i][1] for i in range(3)]  # [catboost, lgbm, xgb]
+        X_val_list = [preprocessor_list[i][1] for i in range(3)] 
         y_val = preprocessor_list[0][3]  # 모든 모델의 y_val은 동일
         
         # model_result 대신 models 딕셔너리 사용
-        weights = find_optimal_weights(models, preprocessor_list)
-        ensemble_pred, ensemble_pred_proba = ensemble_predict(models, X_val_list, weights)
+        best_weights = find_optimal_weights(models, preprocessor_list)
+        # best_weights = optimize_weights_random_search(models, X_val_list, y_val, n_trials=5000)
+        ensemble_pred, ensemble_pred_proba = ensemble_predict(models, X_val_list, best_weights)
         ensemble_acc = accuracy_score(y_val, ensemble_pred)
         ensemble_auc = roc_auc_score(y_val, ensemble_pred_proba)
         print(f"Ensemble - Accuracy: {ensemble_acc:.4f}, AUC: {ensemble_auc:.4f}")
     except Exception as e:
         print(f"Ensemble Error: {e}")
     
-    return preprocessor_list, models
-
-def analyze_model_performance(models, X_val, y_val, model_names=None):
-    """모델별 상세 성능 지표를 출력하는 함수"""
-    if model_names is None:
-        model_names = list(models.keys())
+    # Feature Importance 분석 추가
+    try:
+        feature_importances = analyze_feature_importance(models, preprocessor_list, top_n=20)
+    except Exception as e:
+        print(f"Feature Importance 분석 중 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print("\n" + "="*80)
-    print("📊 모델별 상세 성능 지표")
-    print("="*80)
-    
-    for name in model_names:
-        if name not in models:
-            continue
-            
-        model = models[name]
-        y_pred = model.predict(X_val)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
-        
-        acc = accuracy_score(y_val, y_pred)
-        auc = roc_auc_score(y_val, y_pred_proba)
-        
-        print(f"\n🔹 {name} 모델")
-        print(f"   Accuracy: {acc:.4f}")
-        print(f"   ROC-AUC:  {auc:.4f}")
-        print("\n   Classification Report:")
-        print(classification_report(y_val, y_pred, target_names=['Not Paid', 'Paid']))
-        print("\n   Confusion Matrix:")
-        cm = confusion_matrix(y_val, y_pred)
-        print(f"   [[{cm[0,0]:5d}  {cm[0,1]:5d}]")
-        print(f"    [{cm[1,0]:5d}  {cm[1,1]:5d}]]")
-
-def get_feature_importance(model, feature_names, model_name):
-    """모델별 feature importance를 추출하는 함수"""
-    importance_dict = {}
-    
-    if model_name == 'catboost' or isinstance(model, CatBoostClassifier):
-        # CatBoost
-        importance = model.get_feature_importance()
-        importance_dict = dict(zip(feature_names, importance))
-        
-    elif model_name == 'LightGBM' or isinstance(model, lgb.LGBMClassifier):
-        # LightGBM
-        importance = model.feature_importances_
-        importance_dict = dict(zip(feature_names, importance))
-        
-    elif model_name == 'XGBoost' or isinstance(model, xgb.XGBClassifier):
-        # XGBoost
-        importance = model.feature_importances_
-        importance_dict = dict(zip(feature_names, importance))
-    
-    return importance_dict
-
-def visualize_feature_importance(models, feature_names, top_n=30, figsize=(15, 10)):
-    """모델별 feature importance를 시각화하는 함수"""
-    n_models = len(models)
-    fig, axes = plt.subplots(n_models, 1, figsize=figsize)
-    
-    if n_models == 1:
-        axes = [axes]
-    
-    for idx, (name, model) in enumerate(models.items()):
-        importance_dict = get_feature_importance(model, feature_names, name)
-        
-        # 중요도 순으로 정렬
-        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
-        top_features = sorted_importance[:top_n]
-        
-        features = [f[0] for f in top_features]
-        importances = [f[1] for f in top_features]
-        
-        # 시각화
-        axes[idx].barh(range(len(features)), importances, color='crimson')
-        axes[idx].set_yticks(range(len(features)))
-        axes[idx].set_yticklabels(features)
-        axes[idx].set_xlabel('Feature Importance')
-        axes[idx].set_title(f'{name} - Top {top_n} Feature Importance')
-        axes[idx].invert_yaxis()
-        
-        # 값 표시
-        for i, v in enumerate(importances):
-            axes[idx].text(v, i, f' {v:.2f}', va='center')
-    
-    plt.tight_layout()
-    plt.savefig('feature_importance.png', dpi=300, bbox_inches='tight')
-    print("\n✅ Feature importance 시각화가 'feature_importance.png'로 저장되었습니다.")
-    # plt.show()
-
-def compare_feature_importance(models, feature_names, top_n=15):
-    """모델별 feature importance를 비교하는 함수"""
-    print("\n" + "="*80)
-    print("📈 모델별 Feature Importance 비교 (Top {} features)".format(top_n))
-    print("="*80)
-    
-    all_importances = {}
-    
-    for name, model in models.items():
-        importance_dict = get_feature_importance(model, feature_names, name)
-        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
-        
-        print(f"\n🔹 {name} - Top {top_n} Features:")
-        print("-" * 80)
-        for i, (feature, importance) in enumerate(sorted_importance[:top_n], 1):
-            print(f"  {i:2d}. {feature:40s} : {importance:10.4f}")
-            if feature not in all_importances:
-                all_importances[feature] = {}
-            all_importances[feature][name] = importance
-    
-    # 통합 비교 시각화
-    common_features = set()
-    for name in models.keys():
-        importance_dict = get_feature_importance(models[name], feature_names, name)
-        sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
-        top_features = [f[0] for f in sorted_importance[:top_n]]
-        if not common_features:
-            common_features = set(top_features)
-        else:
-            common_features = common_features.intersection(set(top_features))
-    
-    if common_features:
-        print(f"\n🔹 공통 중요 Feature (모든 모델에서 Top {top_n}에 포함):")
-        print("-" * 80)
-        for feature in sorted(common_features):
-            print(f"  - {feature}")
-
-def save_model_analysis(models, X_val, y_val, feature_names, preprocessor, 
-                        num_cols, onehot_cols, ordinal_cols, filename='model_analysis.txt'):
-    """모델 분석 결과를 텍스트 파일로 저장하는 함수"""
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write("="*80 + "\n")
-        f.write("모델 상세 분석 결과\n")
-        f.write("="*80 + "\n\n")
-        
-        # Feature 이름 정보
-        f.write("📋 사용된 Feature 목록:\n")
-        f.write("-" * 80 + "\n")
-        f.write(f"수치형 Feature ({len(num_cols)}개): {', '.join(num_cols)}\n")
-        f.write(f"OneHot Feature ({len(onehot_cols)}개): {', '.join(onehot_cols)}\n")
-        f.write(f"Ordinal Feature ({len(ordinal_cols)}개): {', '.join(ordinal_cols)}\n")
-        f.write(f"전체 Feature 수: {len(feature_names)}\n\n")
-        
-        # 전체 Feature 목록 출력 (신규 피쳐 포함)
-        f.write("📋 전체 Feature 목록 (신규 조합 특성 포함):\n")
-        f.write("-" * 80 + "\n")
-        
-        # 원본 특성과 신규 특성 구분
-        original_features = get_feature_names(preprocessor, num_cols, onehot_cols, ordinal_cols)
-        new_features = [f for f in feature_names if f not in original_features]
-        
-        f.write(f"원본 특성 수: {len(original_features)}\n")
-        f.write(f"신규 조합 특성 수: {len(new_features)}\n\n")
-        
-        if new_features:
-            f.write("🆕 신규 조합 특성 목록:\n")
-            for i, feat in enumerate(new_features, 1):
-                f.write(f"  {i:3d}. {feat}\n")
-            f.write("\n")
-        
-        f.write("전체 특성 목록:\n")
-        for i, feat in enumerate(feature_names, 1):
-            is_new = "🆕" if feat in new_features else "  "
-            f.write(f"  {i:3d}. {is_new} {feat}\n")
-        f.write("\n")
-        
-        # 모델별 성능
-        f.write("="*80 + "\n")
-        f.write("📊 모델별 성능 지표\n")
-        f.write("="*80 + "\n\n")
-        
-        for name, model in models.items():
-            y_pred = model.predict(X_val)
-            y_pred_proba = model.predict_proba(X_val)[:, 1]
-            
-            acc = accuracy_score(y_val, y_pred)
-            auc = roc_auc_score(y_val, y_pred_proba)
-            
-            f.write(f"🔹 {name} 모델\n")
-            f.write(f"   Accuracy: {acc:.4f}\n")
-            f.write(f"   ROC-AUC:  {auc:.4f}\n")
-            f.write("\n   Classification Report:\n")
-            f.write(classification_report(y_val, y_pred, target_names=['Not Paid', 'Paid']))
-            f.write("\n")
-        
-        # Feature Importance - 모든 특성 저장
-        f.write("="*80 + "\n")
-        f.write("📈 모델별 Feature Importance (전체 특성)\n")
-        f.write("="*80 + "\n\n")
-        
-        for name, model in models.items():
-            importance_dict = get_feature_importance(model, feature_names, name)
-            sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
-            
-            f.write(f"🔹 {name} - 전체 Features ({len(sorted_importance)}개):\n")
-            f.write("-" * 80 + "\n")
-            for i, (feature, importance) in enumerate(sorted_importance, 1):
-                is_new = "🆕" if feature in new_features else "  "
-                f.write(f"  {i:3d}. {is_new} {feature:50s} : {importance:10.4f}\n")
-            f.write("\n")
-    
-    print(f"\n✅ 모델 분석 결과가 '{filename}'로 저장되었습니다.")
-    print(f"   - 전체 특성 수: {len(feature_names)}개")
-    if new_features:
-        print(f"   - 신규 조합 특성 수: {len(new_features)}개")
-
+    return preprocessor_list, models, df_array, best_weights
 
 if __name__ == "__main__":
 
@@ -908,19 +1042,18 @@ if __name__ == "__main__":
     
     # eda(df_train, df_test, df_sub)
 
-    df_array = [df_train, df_test]
-    
     df_num_cols = df_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
     df_cat_cols = df_train.select_dtypes(include=['object', 'category']).columns.tolist()
     
     target_col = 'loan_paid_back'
+    df_array = [df_train, df_test]
+    df_array = data_preprocessing(df_array, target_col, df_num_cols, df_cat_cols )
     
-    # df_train, df_test = data_preprocessing(df_array, target_col, df_num_cols, df_cat_cols )
-    
+
     df_train.head()
     df_test.head()
     
-    preprocessor_list, models = main(df_array, target_col, df_num_cols, df_cat_cols)
+    preprocessor_list, models, df_array, best_weights = main(df_array, target_col, df_num_cols, df_cat_cols)
     
     print("\n" + "="*80)
     print("🔍 모델 상세 분석 시작")
@@ -929,23 +1062,22 @@ if __name__ == "__main__":
     # 테스트 데이터 예측 및 제출 파일 생성
     X_test_processed_list = []
     
-    for i in range(len(preprocessor_list)-1):
+    for i in range(len(preprocessor_list)):
         preprocessor = preprocessor_list[i][4]  # preprocessor 객체
         X_test_processed = preprocessor.transform(df_test)
         X_test_processed_list.append(X_test_processed)
     
+    # X_test_processed_list.append(df_array[1])
+    
     # 2. Validation set 가져오기 (weights 계산용)
     X_val_list = [preprocessor_list[i][1] for i in range(3)]  # [catboost, lgbm, xgb]
     y_val = preprocessor_list[0][3]  # 모든 모델의 y_val은 동일
-
-    # 3. Optimal weights 계산
-    weights = find_optimal_weights(models, preprocessor_list)
-
+    # best_weights = optimize_weights_random_search(models, X_val_list, n_trials=5000)
     # 4. Ensemble 예측
     _, y_pred_ensemble = ensemble_predict(
         models, 
         X_test_processed_list,  # 각 모델별 전처리된 테스트 데이터 리스트
-        weights
+        best_weights
     )
 
     # 5. 제출 파일 생성
