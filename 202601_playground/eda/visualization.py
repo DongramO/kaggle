@@ -5,7 +5,8 @@ import seaborn as sns
 
 
 def visualization_boxplot_iqr_multiple(df, columns, title="", 
-                                       figsize=(15, 8), show_stats=True, grid_layout=True):
+                                       figsize=(15, 8), show_stats=True, grid_layout=True,
+                                       show_outlier_values=True, max_outliers_display=10):
     """
     여러 수치형 컬럼을 grid 형태의 subplot에 boxplot으로 시각화하는 함수
     
@@ -24,6 +25,10 @@ def visualization_boxplot_iqr_multiple(df, columns, title="",
     grid_layout : bool
         True: 각 컬럼을 개별 subplot으로 grid 형태로 배치 (기본값: True)
         False: 모든 컬럼을 하나의 subplot에 배치
+    show_outlier_values : bool
+        이상치 값들을 그래프에 표시할지 여부 (기본값: True)
+    max_outliers_display : int
+        표시할 이상치 개수 제한 (상위/하위 각각 최대 개수, 기본값: 10)
     """
     stats_dict = {}
     
@@ -285,6 +290,80 @@ def visualization_boxplot_iqr_multiple(df, columns, title="",
                             
                             ax.set_yticklabels([f'{tick:.{decimals_y}f}' for tick in y_ticks], fontsize=9)
                 
+                # 이상치 값 표시
+                if show_outlier_values and len(stats['outliers']) > 0:
+                    outliers = stats['outliers'].sort_values()
+                    
+                    # 상위 이상치와 하위 이상치 분리
+                    lower_outliers = outliers[outliers < lower_bound]
+                    upper_outliers = outliers[outliers > upper_bound]
+                    
+                    # 각 그룹에서 최대 max_outliers_display 개만 선택
+                    if len(lower_outliers) > max_outliers_display:
+                        # 하위 이상치 중 가장 작은 값들 선택
+                        lower_outliers_display = lower_outliers.head(max_outliers_display)
+                    else:
+                        lower_outliers_display = lower_outliers
+                    
+                    if len(upper_outliers) > max_outliers_display:
+                        # 상위 이상치 중 가장 큰 값들 선택
+                        upper_outliers_display = upper_outliers.tail(max_outliers_display)
+                    else:
+                        upper_outliers_display = upper_outliers
+                    
+                    # 이상치 값들을 scatter와 text로 표시
+                    x_pos_outlier = 1.05  # boxplot 오른쪽에 표시
+                    
+                    # 하위 이상치 표시
+                    if len(lower_outliers_display) > 0:
+                        lower_values = lower_outliers_display.values
+                        ax.scatter([x_pos_outlier] * len(lower_values), lower_values, 
+                                 color='red', s=30, alpha=0.6, zorder=5, marker='o')
+                        # 값 표시 (너무 많으면 일부만)
+                        if len(lower_values) <= 5:
+                            for val in lower_values:
+                                ax.text(x_pos_outlier + 0.03, val, f'{val:.{decimals}f}',
+                                       fontsize=7, verticalalignment='center',
+                                       bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                        elif len(lower_values) <= max_outliers_display:
+                            # 첫 번째와 마지막 값만 표시
+                            ax.text(x_pos_outlier + 0.03, lower_values[0], f'{lower_values[0]:.{decimals}f}',
+                                   fontsize=7, verticalalignment='center',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                            ax.text(x_pos_outlier + 0.03, lower_values[-1], f'{lower_values[-1]:.{decimals}f}',
+                                   fontsize=7, verticalalignment='center',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                            # 중간에 개수 표시
+                            mid_idx = len(lower_values) // 2
+                            ax.text(x_pos_outlier + 0.03, lower_values[mid_idx], f'...{len(lower_outliers)}개',
+                                   fontsize=6, verticalalignment='center', style='italic',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='lightyellow', alpha=0.5))
+                    
+                    # 상위 이상치 표시
+                    if len(upper_outliers_display) > 0:
+                        upper_values = upper_outliers_display.values
+                        ax.scatter([x_pos_outlier] * len(upper_values), upper_values, 
+                                 color='red', s=30, alpha=0.6, zorder=5, marker='o')
+                        # 값 표시 (너무 많으면 일부만)
+                        if len(upper_values) <= 5:
+                            for val in upper_values:
+                                ax.text(x_pos_outlier + 0.03, val, f'{val:.{decimals}f}',
+                                       fontsize=7, verticalalignment='center',
+                                       bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                        elif len(upper_values) <= max_outliers_display:
+                            # 첫 번째와 마지막 값만 표시
+                            ax.text(x_pos_outlier + 0.03, upper_values[0], f'{upper_values[0]:.{decimals}f}',
+                                   fontsize=7, verticalalignment='center',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                            ax.text(x_pos_outlier + 0.03, upper_values[-1], f'{upper_values[-1]:.{decimals}f}',
+                                   fontsize=7, verticalalignment='center',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                            # 중간에 개수 표시
+                            mid_idx = len(upper_values) // 2
+                            ax.text(x_pos_outlier + 0.03, upper_values[mid_idx], f'...{len(upper_outliers)}개',
+                                   fontsize=6, verticalalignment='center', style='italic',
+                                   bbox=dict(boxstyle='round,pad=0.2', facecolor='lightyellow', alpha=0.5))
+                
                 # 보조 눈금 추가
                 ax.minorticks_on()
                 ax.tick_params(axis='y', which='minor', length=2, width=0.5)
@@ -384,6 +463,53 @@ def visualization_boxplot_iqr_multiple(df, columns, title="",
                        verticalalignment='bottom', horizontalalignment='center',
                        fontsize=8, fontweight='bold', color='blue',
                        bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7, edgecolor='blue'))
+                
+                # 이상치 값 표시
+                if show_outlier_values and len(stats['outliers']) > 0:
+                    outliers = stats['outliers'].sort_values()
+                    lower_bound = stats['lower_bound']
+                    upper_bound = stats['upper_bound']
+                    
+                    # 상위 이상치와 하위 이상치 분리
+                    lower_outliers = outliers[outliers < lower_bound]
+                    upper_outliers = outliers[outliers > upper_bound]
+                    
+                    # 각 그룹에서 최대 max_outliers_display 개만 선택
+                    if len(lower_outliers) > max_outliers_display:
+                        lower_outliers_display = lower_outliers.head(max_outliers_display)
+                    else:
+                        lower_outliers_display = lower_outliers
+                    
+                    if len(upper_outliers) > max_outliers_display:
+                        upper_outliers_display = upper_outliers.tail(max_outliers_display)
+                    else:
+                        upper_outliers_display = upper_outliers
+                    
+                    x_pos_outlier = x_pos + 0.08
+                    
+                    # 하위 이상치 표시
+                    if len(lower_outliers_display) > 0:
+                        lower_values = lower_outliers_display.values
+                        ax.scatter([x_pos_outlier] * len(lower_values), lower_values, 
+                                 color='red', s=20, alpha=0.6, zorder=5, marker='o')
+                        # 값 표시 (5개 이하만)
+                        if len(lower_values) <= 5:
+                            for val in lower_values:
+                                ax.text(x_pos_outlier + 0.05, val, f'{val:.{decimals}f}',
+                                       fontsize=6, verticalalignment='center',
+                                       bbox=dict(boxstyle='round,pad=0.15', facecolor='yellow', alpha=0.7, edgecolor='red'))
+                    
+                    # 상위 이상치 표시
+                    if len(upper_outliers_display) > 0:
+                        upper_values = upper_outliers_display.values
+                        ax.scatter([x_pos_outlier] * len(upper_values), upper_values, 
+                                 color='red', s=20, alpha=0.6, zorder=5, marker='o')
+                        # 값 표시 (5개 이하만)
+                        if len(upper_values) <= 5:
+                            for val in upper_values:
+                                ax.text(x_pos_outlier + 0.05, val, f'{val:.{decimals}f}',
+                                       fontsize=6, verticalalignment='center',
+                                       bbox=dict(boxstyle='round,pad=0.15', facecolor='yellow', alpha=0.7, edgecolor='red'))
         
         # y축 눈금 세밀하게 설정
         if len(data_list) > 0:
@@ -567,6 +693,250 @@ def visualization_bar_multiple(df, columns, bins=None, title='',
     return fig
 
 
+def visualization_categorical_bar(df, columns, title='', figsize=(15, 10), show_percentage=True):
+    """
+    범주형 변수들의 각 카테고리별 비율을 bar 그래프로 시각화하는 함수
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        데이터프레임
+    columns : list
+        시각화할 범주형 컬럼명 리스트
+    title : str
+        차트 제목 (기본값: "")
+    figsize : tuple
+        차트 크기 (기본값: (15, 10))
+    show_percentage : bool
+        바 위에 비율(%) 표시 여부 (기본값: True)
+    """
+    n_cols = len(columns)
+    if n_cols == 0:
+        raise ValueError("columns 리스트가 비어있습니다.")
+    
+    # subplot 개수 계산 (3열 기준)
+    n_rows = (n_cols + 2) // 3  # 올림 계산
+    n_cols_plot = min(3, n_cols)  # 최대 3열
+    
+    # figsize 조정 (행 개수에 맞게)
+    fig_height = figsize[1] * n_rows / 2 if n_rows > 1 else figsize[1]
+    fig, axes = plt.subplots(n_rows, n_cols_plot, figsize=(figsize[0], fig_height))
+    
+    # axes를 1차원 배열로 변환 (subplot이 1개일 때 대비)
+    if n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = axes.tolist() if isinstance(axes, np.ndarray) else list(axes)
+    else:
+        axes = axes.flatten().tolist() if isinstance(axes, np.ndarray) else [ax for row in axes for ax in row]
+    
+    for idx, col in enumerate(columns):
+        ax = axes[idx]
+        data = df[col].dropna()
+        
+        if len(data) == 0:
+            ax.text(0.5, 0.5, f'{col}\n(No data)', 
+                   ha='center', va='center', transform=ax.transAxes,
+                   fontsize=12)
+            ax.set_title(col, fontsize=11, fontweight='bold')
+            continue
+        
+        # 각 카테고리별 개수 계산
+        value_counts = data.value_counts()
+        labels = value_counts.index.tolist()
+        values = value_counts.values
+        
+        # 비율 계산
+        total = values.sum()
+        percentages = (values / total * 100).round(2)
+        
+        # 바 차트 그리기 (수평 바)
+        bars = ax.barh(range(len(labels)), values, color='steelblue', alpha=0.7, edgecolor='black', linewidth=1.2)
+        
+        # Y축 레이블 설정
+        ax.set_yticks(range(len(labels)))
+        # 레이블이 너무 길면 축약
+        display_labels = [str(label) if len(str(label)) <= 30 else str(label)[:27] + '...' for label in labels]
+        ax.set_yticklabels(display_labels, fontsize=9)
+        
+        # 축 레이블 및 제목 설정
+        ax.set_xlabel("Frequency", fontsize=10)
+        ax.set_ylabel("Category", fontsize=10)
+        ax.set_title(col, fontsize=12, fontweight='bold', pad=10)
+        ax.grid(axis='x', alpha=0.3, linestyle='--')
+        
+        # 바 위에 개수와 비율 표시
+        if show_percentage:
+            for i, (bar, value, pct) in enumerate(zip(bars, values, percentages)):
+                x_pos = bar.get_width()
+                ax.text(x_pos + total * 0.01, i, 
+                       f'{value:,} ({pct}%)', 
+                       va='center', fontsize=9, fontweight='bold')
+    
+    # 사용하지 않는 subplot 숨기기
+    for idx in range(n_cols, len(axes)):
+        axes[idx].axis('off')
+    
+    fig.suptitle(title if title else "Categorical Variables Distribution", 
+                 fontsize=14, fontweight='bold', y=0.995)
+    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    
+    return fig
+
+
+def visualization_histogram_by_group(df, value_col, group_col, title='', 
+                                     figsize=(14, 6), bins=30, alpha=0.7, 
+                                     side_by_side=True, show_statistics=True):
+    """
+    그룹별 수치형 변수의 히스토그램을 비교 시각화하는 함수
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        데이터프레임
+    value_col : str
+        분포를 확인할 수치형 컬럼명 (예: 'exam_score')
+    group_col : str
+        그룹을 나누는 범주형 컬럼명 (예: 'internet_access')
+    title : str
+        차트 제목 (기본값: "")
+    figsize : tuple
+        차트 크기 (기본값: (14, 6))
+    bins : int
+        히스토그램 구간 개수 (기본값: 30)
+    alpha : float
+        투명도 (기본값: 0.7)
+    side_by_side : bool
+        True: 나란히 비교, False: 겹쳐서 비교 (기본값: True)
+    show_statistics : bool
+        통계 정보 표시 여부 (기본값: True)
+    """
+    if value_col not in df.columns:
+        raise ValueError(f"'{value_col}' 컬럼이 데이터프레임에 없습니다.")
+    if group_col not in df.columns:
+        raise ValueError(f"'{group_col}' 컬럼이 데이터프레임에 없습니다.")
+    
+    # 그룹별 데이터 분리
+    groups = df[group_col].dropna().unique()
+    groups = sorted(groups)  # 정렬해서 일관된 순서 유지
+    
+    if len(groups) == 0:
+        raise ValueError(f"'{group_col}' 컬럼에 데이터가 없습니다.")
+    
+    # 통계 정보 계산
+    stats_dict = {}
+    data_by_group = {}
+    for group in groups:
+        group_data = df[df[group_col] == group][value_col].dropna()
+        data_by_group[group] = group_data
+        
+        if len(group_data) > 0:
+            stats_dict[group] = {
+                'count': len(group_data),
+                'mean': group_data.mean(),
+                'median': group_data.median(),
+                'std': group_data.std(),
+                'min': group_data.min(),
+                'max': group_data.max()
+            }
+    
+    if side_by_side:
+        # 나란히 비교: subplot 사용
+        fig, axes = plt.subplots(1, len(groups), figsize=figsize, sharey=True)
+        
+        if len(groups) == 1:
+            axes = [axes]
+        
+        for idx, group in enumerate(groups):
+            ax = axes[idx]
+            group_data = data_by_group[group]
+            
+            if len(group_data) > 0:
+                # 히스토그램 그리기
+                ax.hist(group_data, bins=bins, alpha=alpha, edgecolor='black', 
+                       color=plt.cm.Set2(idx), label=str(group))
+                
+                # 평균선 표시
+                mean_val = stats_dict[group]['mean']
+                median_val = stats_dict[group]['median']
+                ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, 
+                          label=f'Mean: {mean_val:.2f}')
+                ax.axvline(median_val, color='green', linestyle='--', linewidth=2, 
+                          label=f'Median: {median_val:.2f}')
+                
+                # 통계 정보 표시
+                if show_statistics:
+                    stats_text = f"Count: {stats_dict[group]['count']:,}\n"
+                    stats_text += f"Mean: {stats_dict[group]['mean']:.2f}\n"
+                    stats_text += f"Median: {stats_dict[group]['median']:.2f}\n"
+                    stats_text += f"Std: {stats_dict[group]['std']:.2f}\n"
+                    stats_text += f"Min: {stats_dict[group]['min']:.2f}\n"
+                    stats_text += f"Max: {stats_dict[group]['max']:.2f}"
+                    
+                    ax.text(0.65, 0.95, stats_text, transform=ax.transAxes,
+                           fontsize=9, verticalalignment='top',
+                           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                
+                ax.set_xlabel(value_col, fontsize=11)
+                ax.set_ylabel('Frequency', fontsize=11)
+                ax.set_title(f'{group_col} = {group}', fontsize=12, fontweight='bold')
+                ax.legend(loc='upper right', fontsize=9)
+                ax.grid(alpha=0.3, linestyle='--')
+            else:
+                ax.text(0.5, 0.5, f'{group_col} = {group}\n(No data)', 
+                       ha='center', va='center', transform=ax.transAxes,
+                       fontsize=12)
+                ax.set_title(f'{group_col} = {group}', fontsize=12, fontweight='bold')
+    else:
+        # 겹쳐서 비교: 하나의 subplot에 모두 그리기
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        colors = plt.cm.Set2(range(len(groups)))
+        for idx, group in enumerate(groups):
+            group_data = data_by_group[group]
+            
+            if len(group_data) > 0:
+                ax.hist(group_data, bins=bins, alpha=alpha, edgecolor='black',
+                       color=colors[idx], label=f'{group_col} = {group}')
+        
+        # 평균선 표시
+        for idx, group in enumerate(groups):
+            if group in stats_dict:
+                mean_val = stats_dict[group]['mean']
+                ax.axvline(mean_val, color=colors[idx], linestyle='--', 
+                          linewidth=2, alpha=0.8, label=f'{group} Mean: {mean_val:.2f}')
+        
+        ax.set_xlabel(value_col, fontsize=12)
+        ax.set_ylabel('Frequency', fontsize=12)
+        ax.set_title(title if title else f'{value_col} Distribution by {group_col}', 
+                    fontsize=13, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=10)
+        ax.grid(alpha=0.3, linestyle='--')
+    
+    # 통계 정보 출력
+    if show_statistics:
+        print("\n" + "=" * 80)
+        print(f"{value_col} 통계 정보 (by {group_col})")
+        print("=" * 80)
+        for group in groups:
+            if group in stats_dict:
+                stats = stats_dict[group]
+                print(f"\n[{group_col} = {group}]")
+                print(f"  Count: {stats['count']:,}")
+                print(f"  Mean: {stats['mean']:.2f}")
+                print(f"  Median: {stats['median']:.2f}")
+                print(f"  Std: {stats['std']:.2f}")
+                print(f"  Min: {stats['min']:.2f}")
+                print(f"  Max: {stats['max']:.2f}")
+        print("=" * 80 + "\n")
+    
+    fig.suptitle(title if title else f'{value_col} Distribution by {group_col}', 
+                 fontsize=14, fontweight='bold', y=1.0 if side_by_side else 0.98)
+    plt.tight_layout()
+    
+    return fig, stats_dict
+
+
 # 사용 예시
 if __name__ == "__main__":
     # dataload 모듈에서 데이터 로드
@@ -626,6 +996,53 @@ if __name__ == "__main__":
         )
         plt.show()
         print("모든 수치형 컬럼 이상치 탐지 완료!")
+    
+    print("=" * 80)
+    print("=" * 80)
+    
+    # 범주형 변수 비율 시각화
+    print("\n" + "=" * 80)
+    print("범주형 변수 비율 시각화 (Bar Chart)")
+    print("=" * 80)
+    
+    if len(categorical_cols) > 0:
+        print(f"\n{categorical_cols} 범주형 컬럼들을 시각화 중...")
+        fig_cat = visualization_categorical_bar(
+            df_train,
+            categorical_cols,
+            title="Categorical Variables Distribution",
+            figsize=(18, 6 * ((len(categorical_cols) + 2) // 3)),
+            show_percentage=True
+        )
+        plt.show()
+        print("모든 범주형 컬럼 시각화 완료!")
+    else:
+        print("시각화할 범주형 변수가 없습니다.")
+    
+    print("=" * 80)
+    print("=" * 80)
+    
+    # Internet_access에 따른 exam_score 분포 히스토그램
+    print("\n" + "=" * 80)
+    print("Internet_access에 따른 exam_score 분포 히스토그램")
+    print("=" * 80)
+    
+    if 'internet_access' in df_train.columns and 'exam_score' in df_train.columns:
+        fig_hist, stats_hist = visualization_histogram_by_group(
+            df_train,
+            value_col='exam_score',
+            group_col='internet_access',
+            title='Exam Score Distribution by Internet Access',
+            figsize=(14, 6),
+            bins=30,
+            alpha=0.7,
+            side_by_side=True,
+            show_statistics=True
+        )
+        plt.show()
+        print("Internet_access별 exam_score 분포 시각화 완료!")
+    else:
+        print("'internet_access' 또는 'exam_score' 컬럼이 데이터에 없습니다.")
     
     print("=" * 80)
     print("=" * 80)
