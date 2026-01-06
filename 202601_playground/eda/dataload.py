@@ -38,8 +38,6 @@ def data_classifier(df_train):
     # id 컬럼은 시각화 불필요하므로 제외
     if 'id' in numeric_cols:
         numeric_cols.remove('id')
-    if 'id' in categorical_cols:
-        categorical_cols.remove('id')
     
     df_exam_score = df_train['exam_score']
     
