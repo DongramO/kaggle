@@ -16,23 +16,37 @@ if __name__ == "__main__":
     print("🎯 Kaggle Competition - 모델 학습 및 앙상블")
     print("="*60)
     
-    # GPU 사용 여부 설정 (True로 설정하면 GPU 사용)
+    # ========== 설정 옵션 ==========
+    # GPU 사용 여부 설정
     USE_GPU = True  # GPU를 사용하려면 True로 변경
+    USE_OPTUNA = False  # True로 설정하면 Optuna 최적화 실행 (시간이 오래 걸림)
+    N_TRIALS = 50  # Optuna 시도 횟수 (USE_OPTUNA=True일 때만 사용)
+    OPTUNA_SAMPLE_SIZE = None  # 예: 50000 (5만 개만 사용)
+    USE_SAVED_PARAMS = None  # None으로 설정하면 자동 감지
     
-    # 하이퍼파라미터 저장 경로 설정
-    # 기본값: 프로젝트 루트의 modeling 디렉토리
-    PARAMS_FILEPATH = os.path.join(
-        project_root,
-        'modeling',
-        'best_hyperparameters.json'
-    )
+    ENCODING_CONFIG = {
+        'onehot_cols': ['gender', 'course', 'internet_access', 'study_method'],
+        'ordinal_cols': ['facility_rating', 'sleep_quality', 'exam_difficulty'],
+        'onehot_params': {'handle_unknown': 'ignore'},
+        'ordinal_params': {'handle_unknown': 'use_encoded_value', 'unknown_value': -1},
+        'drop_original': True
+    }
+
+    PARAMS_FILEPATH = os.path.join(project_root, 'best_hyperparameters.json')
     
+    # ========== 실행 ==========
     results, ensemble_pred, submission = main(
+        use_optuna=USE_OPTUNA,
+        n_trials=N_TRIALS,
+        use_saved_params=USE_SAVED_PARAMS,
+        params_filepath=PARAMS_FILEPATH,
         use_gpu=USE_GPU,
-        params_filepath=PARAMS_FILEPATH
+        optuna_sample_size=OPTUNA_SAMPLE_SIZE,
+        encoding_config=ENCODING_CONFIG
     )
     
     print("\n" + "="*60)
     print("✅ 모든 작업이 완료되었습니다!")
+    print("📤 제출 파일이 프로젝트 루트에 저장되었습니다.")
     print("="*60)
 

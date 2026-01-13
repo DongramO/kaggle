@@ -1,0 +1,8 @@
+﻿Feature,Average_Importance
+class_attendance_x_study_hours,0.4953709983440208
+study_hours,0.11094822848929099
+study_hours_add_sleep_hours,0.05645500884763799
+class_attendance,0.04562534512724767
+sleep_hours,0.012988503298872462
+study_hours_study_hours_add_sleep_hours_ratio,0.0111559752122287
+age,0.0021314323866172655

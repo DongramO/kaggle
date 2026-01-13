@@ -1,6 +1,62 @@
 import numpy as np
 import pandas as pd
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
+
+
+def _get_config_value(config: dict, key: str, default_flag: bool = False) -> tuple[bool, dict]:
+    """
+    config에서 설정값을 추출하는 헬퍼 함수
+    
+    Parameters:
+    -----------
+    config : dict
+        전체 config 딕셔너리
+    key : str
+        설정 키
+    default_flag : bool
+        기본 flag 값 (dict가 아닌 경우 사용)
+        
+    Returns:
+    --------
+    tuple[bool, dict]
+        (is_enabled, config_dict)
+        - is_enabled: 기능이 활성화되어 있는지 여부
+        - config_dict: 해당 기능의 설정 딕셔너리 (없으면 빈 dict)
+    """
+    config_value = config.get(key, default_flag if default_flag else {})
+    
+    # dict 구조인 경우
+    if isinstance(config_value, dict):
+        flag = config_value.get('flag', default_flag if default_flag else False)
+        return flag, config_value
+    
+    # bool 값인 경우 (기존 flat 구조 호환성)
+    if isinstance(config_value, bool):
+        if config_value:
+            # flat 구조에서 설정값들을 추출
+            flat_config = {}
+            # 각 기능별로 flat 구조의 키들을 매핑
+            flat_key_mapping = {
+                'clip_outliers': ['clip_rules'],
+                'transform_numeric': ['transformations'],
+                'create_interactions': ['feature_pairs', 'operations'],
+                'create_ratios': ['numerator_cols', 'denominator_cols', 'ratio_feature_names'],
+                'create_statistical': ['feature_groups', 'statistics'],
+                'create_categorical_interactions': ['categorical_pairs', 'separator'],
+                'create_frequency': [],
+                'create_binning': ['n_bins', 'binning_strategy'],
+            }
+            
+            for flat_key in flat_key_mapping.get(key, []):
+                if flat_key in config:
+                    flat_config[flat_key] = config[flat_key]
+            
+            return True, flat_config
+        else:
+            return False, {}
+    
+    # 기본값
+    return default_flag, {}
 
 
 def transform_numeric_features(
@@ -54,43 +110,36 @@ def create_interaction_features(
     feature_pairs: List[tuple],
     operations: Optional[List[str]] = None
 ) -> pd.DataFrame:
-    """
-    두 특성 간의 상호작용 특성을 생성합니다.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    feature_pairs : List[tuple]
-        (col1, col2) 형태의 튜플 리스트
-    operations : List[str], optional
-        적용할 연산 리스트 ('multiply', 'divide', 'add', 'subtract' 등)
-        기본값: ['multiply', 'divide']
-    
-    Returns:
-    --------
-    pd.DataFrame
-        상호작용 특성이 추가된 데이터프레임
-    """
-    if operations is None:
-        operations = ['multiply', 'divide', 'add', 'subtract']
-    
+
     df = df.copy()
     eps = 1e-6
     
-    for col1, col2 in feature_pairs:
+    if operations is None:
+        # operations가 지정되지 않으면 feature_pairs 개수만큼 'multiply' 반복
+        operations = ['multiply'] * len(feature_pairs)
+    
+    # 1:1 매핑: feature_pairs와 operations 개수가 일치해야 함
+    if len(feature_pairs) != len(operations):
+        raise ValueError(
+            f"feature_pairs({len(feature_pairs)}개)와 operations({len(operations)}개)의 개수가 일치하지 않습니다. "
+            f"1:1 매핑을 위해서는 개수가 같아야 합니다."
+        )
+    
+    # 각 feature_pair에 대해 해당하는 operation만 적용
+    for (col1, col2), op in zip(feature_pairs, operations):
         if col1 not in df.columns or col2 not in df.columns:
             continue
         
-        for op in operations:
-            if op == 'multiply':
-                df[f'{col1}_x_{col2}'] = df[col1] * df[col2]
-            elif op == 'divide':
-                df[f'{col1}_div_{col2}'] = df[col1] / (df[col2] + eps)
-            elif op == 'add':
-                df[f'{col1}_plus_{col2}'] = df[col1] + df[col2]
-            elif op == 'subtract':
-                df[f'{col1}_minus_{col2}'] = df[col1] - df[col2]
+        if op == 'multiply':
+            df[f'{col1}_x_{col2}'] = df[col1] * df[col2]
+        elif op == 'divide':
+            df[f'{col1}_div_{col2}'] = df[col1] / (df[col2] + eps)
+        elif op == 'add':
+            df[f'{col1}_add_{col2}'] = df[col1] + df[col2]
+        elif op == 'subtract':
+            df[f'{col1}_subtract_{col2}'] = df[col1] - df[col2]
+        else:
+            raise ValueError(f"지원하지 않는 연산: {op}. 'multiply', 'divide', 'add', 'subtract' 중 하나를 사용하세요.")
     
     return df
 
@@ -99,7 +148,7 @@ def create_ratio_features(
     df: pd.DataFrame,
     numerator_cols: List[str],
     denominator_cols: List[str],
-    feature_names: Optional[List[str]] = None
+    feature_names: Optional[Union[List[str], str]] = None
 ) -> pd.DataFrame:
     """
     비율 특성을 생성합니다.
@@ -112,13 +161,23 @@ def create_ratio_features(
         분자 컬럼 리스트
     denominator_cols : List[str]
         분모 컬럼 리스트
-    feature_names : List[str], optional
-        생성될 특성 이름 리스트 (기본값: 자동 생성)
+    feature_names : Union[List[str], str], optional
+        생성될 특성 이름 지정 방법
+        - List[str]: 각 비율 특성의 이름 리스트 (numerator_cols, denominator_cols와 길이가 같아야 함)
+        - str: suffix 문자열 (예: "_ratio") - {num_col}_{denom_col}{suffix} 형식으로 생성
+        - None: {num_col}_{denom_col}_ratio 형식으로 자동 생성 (기본값)
     
     Returns:
     --------
     pd.DataFrame
         비율 특성이 추가된 데이터프레임
+        
+    Examples:
+    --------
+    >>> numerator_cols = ['age', 'study_hours']
+    >>> denominator_cols = ['study_hours', 'sleep_hours']
+    >>> feature_names = "_ratio"
+    >>> # 결과: age_study_hours_ratio, study_hours_sleep_hours_ratio
     """
     df = df.copy()
     eps = 1e-6
@@ -127,10 +186,18 @@ def create_ratio_features(
         if num_col not in df.columns or denom_col not in df.columns:
             continue
         
-        if feature_names and i < len(feature_names):
+        if feature_names is None:
+            # 기본 형식: {num_col}_{denom_col}_ratio
+            feature_name = f'{num_col}_{denom_col}_ratio'
+        elif isinstance(feature_names, str):
+            # 문자열인 경우: suffix로 사용 {num_col}_{denom_col}{suffix}
+            feature_name = f'{num_col}_{denom_col}{feature_names}'
+        elif isinstance(feature_names, list) and i < len(feature_names):
+            # 리스트인 경우: 지정된 이름 사용
             feature_name = feature_names[i]
         else:
-            feature_name = f'{num_col}_div_{denom_col}'
+            # 기본 형식 (fallback)
+            feature_name = f'{num_col}_{denom_col}_ratio'
         
         df[feature_name] = df[num_col] / (df[denom_col] + eps)
     
@@ -425,48 +492,55 @@ def apply_feature_engineering_pipeline(
     df = df.copy()
     
     # 이상치 클리핑
-    if config.get('clip_outliers', True):
-        clip_rules = config.get('clip_rules', None)
-        df = clip_outliers(df, numeric_cols, clip_rules)
+    is_enabled, clip_cfg = _get_config_value(config, 'clip_outliers', default_flag=True)
+    if is_enabled:
+        df = clip_outliers(df, numeric_cols, clip_cfg.get('clip_rules', None))
     
     # 수치형 특성 변환
-    if config.get('transform_numeric', False):
-        transformations = config.get('transformations', ['log', 'sqrt'])
+    is_enabled, transform_cfg = _get_config_value(config, 'transform_numeric', default_flag=False)
+    if is_enabled:
+        transformations = transform_cfg.get('transformations', ['log', 'sqrt'])
         df = transform_numeric_features(df, numeric_cols, transformations)
     
     # 상호작용 특성 생성
-    if config.get('create_interactions', False):
-        feature_pairs = config.get('feature_pairs', [])
-        operations = config.get('operations', ['multiply', 'divide'])
+    is_enabled, interaction_cfg = _get_config_value(config, 'create_interactions', default_flag=False)
+    if is_enabled:
+        feature_pairs = interaction_cfg.get('feature_pairs', [])
+        operations = interaction_cfg.get('operations', ['multiply', 'divide'])
         df = create_interaction_features(df, feature_pairs, operations)
     
     # 비율 특성 생성
-    if config.get('create_ratios', False):
-        numerator_cols = config.get('numerator_cols', [])
-        denominator_cols = config.get('denominator_cols', [])
-        feature_names = config.get('ratio_feature_names', None)
+    is_enabled, ratio_cfg = _get_config_value(config, 'create_ratios', default_flag=False)
+    if is_enabled:
+        numerator_cols = ratio_cfg.get('numerator_cols', [])
+        denominator_cols = ratio_cfg.get('denominator_cols', [])
+        feature_names = ratio_cfg.get('ratio_feature_names', None)
         df = create_ratio_features(df, numerator_cols, denominator_cols, feature_names)
     
     # 통계적 특성 생성
-    if config.get('create_statistical', False):
-        feature_groups = config.get('feature_groups', [])
-        statistics = config.get('statistics', ['mean', 'std'])
+    is_enabled, statistical_cfg = _get_config_value(config, 'create_statistical', default_flag=False)
+    if is_enabled:
+        feature_groups = statistical_cfg.get('feature_groups', [])
+        statistics = statistical_cfg.get('statistics', ['mean', 'std'])
         df = create_statistical_features(df, feature_groups, statistics)
     
     # 범주형 조합 특성 생성
-    if config.get('create_categorical_interactions', False):
-        categorical_pairs = config.get('categorical_pairs', [])
-        separator = config.get('separator', '_')
+    is_enabled, cat_interaction_cfg = _get_config_value(config, 'create_categorical_interactions', default_flag=False)
+    if is_enabled:
+        categorical_pairs = cat_interaction_cfg.get('categorical_pairs', [])
+        separator = cat_interaction_cfg.get('separator', '_')
         df = create_categorical_interactions(df, categorical_pairs, separator)
     
     # 빈도 인코딩
-    if config.get('create_frequency', False):
+    is_enabled, _ = _get_config_value(config, 'create_frequency', default_flag=False)
+    if is_enabled:
         df = create_frequency_features(df, categorical_cols)
     
     # 구간화
-    if config.get('create_binning', False):
-        n_bins = config.get('n_bins', 5)
-        strategy = config.get('binning_strategy', 'quantile')
+    is_enabled, binning_cfg = _get_config_value(config, 'create_binning', default_flag=False)
+    if is_enabled:
+        n_bins = binning_cfg.get('n_bins', 5)
+        strategy = binning_cfg.get('binning_strategy', 'quantile')
         df = create_binning_features(df, numeric_cols, n_bins, strategy)
     
     return df

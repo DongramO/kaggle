@@ -86,6 +86,7 @@ def ordinal_encode(
     df: pd.DataFrame,
     categorical_cols: List[str],
     categories: Optional[Union[List[List], str]] = 'auto',
+    category_orders: Optional[Dict[str, List]] = None,
     drop_original: bool = True,
     handle_unknown: str = 'error',
     unknown_value: Optional[Union[int, float]] = None
@@ -101,7 +102,15 @@ def ordinal_encode(
         ordinal 인코딩을 적용할 범주형 컬럼 리스트
     categories : List[List] or str, optional
         각 컬럼의 카테고리 순서 리스트 또는 'auto'
-        기본값: 'auto' (알파벳 순서로 자동 설정)
+        - List[List]: 각 컬럼의 순서를 명시적으로 지정 (예: [['low', 'medium', 'high'], ['small', 'large']])
+                     categorical_cols의 순서와 일치해야 함
+        - 'auto': 알파벳 순서로 자동 설정 (기본값)
+        - category_orders가 지정되면 무시됨
+    category_orders : Dict[str, List], optional
+        각 컬럼별로 카테고리 순서를 딕셔너리로 지정
+        예: {'quality': ['poor', 'average', 'good', 'excellent'], 
+             'size': ['small', 'medium', 'large']}
+        category_orders가 지정되면 categories 파라미터보다 우선순위가 높음
     drop_original : bool
         원본 컬럼을 삭제할지 여부 (기본값: True)
     handle_unknown : str
@@ -121,6 +130,32 @@ def ordinal_encode(
     - unknown_value는 학습 데이터의 모든 값보다 작거나 큰 값으로 설정 권장
     - 예: 학습 데이터가 [0, 1, 2]로 인코딩되면 unknown_value=-1 또는 999 사용
     
+    Examples:
+    ---------
+    # 방법 1: category_orders 사용 (권장 - 더 명확함)
+    df_encoded = ordinal_encode(
+        df, 
+        categorical_cols=['quality', 'size'],
+        category_orders={
+            'quality': ['poor', 'average', 'good', 'excellent'],
+            'size': ['small', 'medium', 'large']
+        },
+        handle_unknown='use_encoded_value',
+        unknown_value=-1
+    )
+    
+    # 방법 2: categories 파라미터 사용 (컬럼 순서에 맞춰야 함)
+    df_encoded = ordinal_encode(
+        df,
+        categorical_cols=['quality', 'size'],
+        categories=[
+            ['poor', 'average', 'good', 'excellent'],  # quality 순서
+            ['small', 'medium', 'large']  # size 순서
+        ],
+        handle_unknown='use_encoded_value',
+        unknown_value=-1
+    )
+    
     Returns:
     --------
     pd.DataFrame
@@ -132,6 +167,21 @@ def ordinal_encode(
     valid_cols = [col for col in categorical_cols if col in df.columns]
     if len(valid_cols) == 0:
         return df
+    
+    # category_orders가 지정된 경우, categories 리스트로 변환
+    if category_orders is not None:
+        categories_list = []
+        for col in valid_cols:
+            if col in category_orders:
+                categories_list.append(category_orders[col])
+            else:
+                # 지정되지 않은 컬럼은 자동으로 처리
+                unique_values = sorted(df[col].dropna().unique().tolist())
+                categories_list.append(unique_values)
+        categories = categories_list
+    elif categories == 'auto' or categories is None:
+        # 'auto'인 경우, 각 컬럼의 고유값을 알파벳 순서로 정렬
+        categories = [sorted(df[col].dropna().unique().tolist()) for col in valid_cols]
     
     # OrdinalEncoder 파라미터 설정
     encoder_params = {
@@ -175,6 +225,7 @@ def fit_encoder(
     df: pd.DataFrame,
     categorical_cols: List[str],
     encoding_type: str = 'onehot',
+    category_orders: Optional[Dict[str, List]] = None,
     **kwargs
 ) -> Union[OneHotEncoder, OrdinalEncoder]:
     """
@@ -189,13 +240,33 @@ def fit_encoder(
     encoding_type : str
         인코딩 타입 ('onehot' or 'ordinal')
         기본값: 'onehot'
+    category_orders : Dict[str, List], optional
+        ordinal 인코딩 시 각 컬럼별로 카테고리 순서를 딕셔너리로 지정
+        예: {'quality': ['poor', 'average', 'good', 'excellent']}
+        encoding_type='ordinal'일 때만 사용됨
     **kwargs
         인코더에 전달할 추가 파라미터
+        - categories: List[List] 형태로도 지정 가능 (category_orders보다 우선순위 낮음)
     
     Returns:
     --------
     OneHotEncoder or OrdinalEncoder
         학습된 인코더 객체
+        
+    Examples:
+    ---------
+    # Ordinal 인코더 with category_orders
+    encoder = fit_encoder(
+        df_train,
+        categorical_cols=['quality', 'size'],
+        encoding_type='ordinal',
+        category_orders={
+            'quality': ['poor', 'average', 'good', 'excellent'],
+            'size': ['small', 'medium', 'large']
+        },
+        handle_unknown='use_encoded_value',
+        unknown_value=-1
+    )
     """
     # 존재하는 컬럼만 필터링
     valid_cols = [col for col in categorical_cols if col in df.columns]
@@ -207,13 +278,26 @@ def fit_encoder(
         # OneHotEncoder 기본 파라미터
         default_params = {
             'handle_unknown': 'ignore',
-            'sparse': False
         }
         # kwargs로 기본값 덮어쓰기
         encoder_params = {**default_params, **kwargs}
         encoder = OneHotEncoder(**encoder_params)
         
     elif encoding_type == 'ordinal':
+        # category_orders가 지정된 경우 categories 리스트로 변환
+        if category_orders is not None:
+            categories_list = []
+            for col in valid_cols:
+                if col in category_orders:
+                    categories_list.append(category_orders[col])
+                else:
+                    # 지정되지 않은 컬럼은 자동으로 처리
+                    unique_values = sorted(df[col].dropna().unique().tolist())
+                    categories_list.append(unique_values)
+            # kwargs에 categories가 이미 있으면 덮어쓰지 않음 (명시적 지정 우선)
+            if 'categories' not in kwargs:
+                kwargs['categories'] = categories_list
+        
         # OrdinalEncoder 기본 파라미터
         default_params = {
             'handle_unknown': 'error',
@@ -221,6 +305,13 @@ def fit_encoder(
         }
         # kwargs로 기본값 덮어쓰기
         encoder_params = {**default_params, **kwargs}
+        
+        # categories가 'auto'인 경우, 각 컬럼의 고유값을 알파벳 순서로 정렬
+        if encoder_params.get('categories') == 'auto':
+            encoder_params['categories'] = [
+                sorted(df[col].dropna().unique().tolist()) for col in valid_cols
+            ]
+        
         encoder = OrdinalEncoder(**encoder_params)
         
     else:
@@ -329,14 +420,39 @@ def apply_encoding_pipeline(
         예: {
             'onehot_cols': ['col1', 'col2'],
             'ordinal_cols': ['col3', 'col4'],
-            'onehot_params': {...},
-            'ordinal_params': {...}
+            'onehot_params': {'handle_unknown': 'ignore'},
+            'ordinal_params': {
+                'category_orders': {
+                    'col3': ['low', 'medium', 'high'],
+                    'col4': ['small', 'medium', 'large']
+                },
+                'handle_unknown': 'use_encoded_value',
+                'unknown_value': -1
+            }
         }
     
     Returns:
     --------
     pd.DataFrame
         인코딩이 적용된 데이터프레임
+        
+    Examples:
+    ---------
+    # Ordinal 변수의 order 명시적 지정 예시
+    config = {
+        'onehot_cols': ['gender', 'color'],
+        'ordinal_cols': ['quality', 'size'],
+        'onehot_params': {'handle_unknown': 'ignore'},
+        'ordinal_params': {
+            'category_orders': {
+                'quality': ['poor', 'average', 'good', 'excellent'],
+                'size': ['small', 'medium', 'large']
+            },
+            'handle_unknown': 'use_encoded_value',
+            'unknown_value': -1
+        }
+    }
+    df_encoded = apply_encoding_pipeline(df, ['gender', 'color', 'quality', 'size'], config)
     """
     if encoding_config is None:
         encoding_config = {}
@@ -366,14 +482,21 @@ def apply_encoding_pipeline(
     return df
 
 
-# 방법 3: 파이프라인 사용
+# 방법 3: 파이프라인 사용 (category_orders 포함)
 # config = {
-#     'onehot_cols': ['color', 'size'],
-#     'ordinal_cols': ['category'],
+#     'onehot_cols': ['color', 'gender'],
+#     'ordinal_cols': ['quality', 'size'],
 #     'onehot_params': {'handle_unknown': 'ignore'},
-#     'ordinal_params': {'handle_unknown': 'use_encoded_value', 'unknown_value': -1}
+#     'ordinal_params': {
+#         'category_orders': {
+#             'quality': ['poor', 'average', 'good', 'excellent'],
+#             'size': ['small', 'medium', 'large']
+#         },
+#         'handle_unknown': 'use_encoded_value',
+#         'unknown_value': -1
+#     }
 # }
-# df_encoded = apply_encoding_pipeline(df, ['color', 'size', 'category'], config)
+# df_encoded = apply_encoding_pipeline(df, ['color', 'gender', 'quality', 'size'], config)
 
 
 # ============================================================================
@@ -431,33 +554,68 @@ def apply_encoding_pipeline(
       - 카테고리별 타겟 평균으로 인코딩
       - 새로운 값은 전체 평균 또는 별도 처리
 
-4. 실제 사용 예시:
-   ---------------
+4. Ordinal Encoding with category_orders 사용 예시:
+   -------------------------------------------------
    
-   # 방법 1: OneHotEncoder with handle_unknown='ignore' (권장)
-   encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
-   encoder.fit(train_df[['color']])
-   train_encoded = encoder.transform(train_df[['color']])
-   val_encoded = encoder.transform(val_df[['color']])  # 새로운 값도 안전하게 처리
-   
-   # 방법 2: OrdinalEncoder with unknown_value
-   encoder = OrdinalEncoder(
+   # 방법 1: ordinal_encode 함수 직접 사용
+   df_encoded = ordinal_encode(
+       df,
+       categorical_cols=['sleep_quality', 'facility_rating', 'exam_difficulty'],
+       category_orders={
+           'sleep_quality': ['poor', 'average', 'good'],
+           'facility_rating': ['low', 'medium', 'high'],
+           'exam_difficulty': ['easy', 'moderate', 'hard']
+       },
        handle_unknown='use_encoded_value',
        unknown_value=-1
    )
-   encoder.fit(train_df[['category']])
-   train_encoded = encoder.transform(train_df[['category']])
-   val_encoded = encoder.transform(val_df[['category']])
    
-   # 방법 3: Rare Category 사전 처리
-   def handle_rare_categories(df, col, min_freq=5):
-       freq = df[col].value_counts()
-       rare_cats = freq[freq < min_freq].index
-       df[col] = df[col].replace(rare_cats, 'rare')
-       return df
+   # 방법 2: fit_encoder와 transform_with_encoder 사용 (학습/테스트 분리)
+   ordinal_encoder = fit_encoder(
+       X_train,
+       categorical_cols=['sleep_quality', 'facility_rating'],
+       encoding_type='ordinal',
+       category_orders={
+           'sleep_quality': ['poor', 'average', 'good'],
+           'facility_rating': ['low', 'medium', 'high']
+       },
+       handle_unknown='use_encoded_value',
+       unknown_value=-1
+   )
    
-   train_df = handle_rare_categories(train_df, 'category', min_freq=5)
-   val_df = handle_rare_categories(val_df, 'category', min_freq=5)
-   # 이제 'rare' 카테고리가 학습 데이터에 포함되어 있음
+   # 학습 데이터 변환
+   X_train_encoded = transform_with_encoder(
+       X_train,
+       ordinal_encoder,
+       categorical_cols=['sleep_quality', 'facility_rating']
+   )
+   
+   # 테스트 데이터 변환
+   X_test_encoded = transform_with_encoder(
+       X_test,
+       ordinal_encoder,
+       categorical_cols=['sleep_quality', 'facility_rating']
+   )
+   
+   # 방법 3: 파이프라인 사용 (encoding_config 활용)
+   encoding_config = {
+       'onehot_cols': ['gender', 'course'],
+       'ordinal_cols': ['sleep_quality', 'facility_rating', 'exam_difficulty'],
+       'onehot_params': {'handle_unknown': 'ignore'},
+       'ordinal_params': {
+           'category_orders': {
+               'sleep_quality': ['poor', 'average', 'good'],
+               'facility_rating': ['low', 'medium', 'high'],
+               'exam_difficulty': ['easy', 'moderate', 'hard']
+           },
+           'handle_unknown': 'use_encoded_value',
+           'unknown_value': -1
+       }
+   }
+   df_encoded = apply_encoding_pipeline(
+       df,
+       categorical_cols=['gender', 'course', 'sleep_quality', 'facility_rating', 'exam_difficulty'],
+       encoding_config=encoding_config
+   )
 """
 

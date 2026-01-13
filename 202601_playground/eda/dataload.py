@@ -1,10 +1,46 @@
 import numpy as np
 import pandas as pd
+import os
+
+def get_data_paths():
+    """
+    데이터 파일 경로 반환
+    
+    Returns:
+    --------
+    tuple
+        (train_path, test_path, sub_path)
+    """
+    # 현재 파일 기준으로 프로젝트 루트 찾기
+    # eda/dataload.py -> 202601_playground/eda/dataload.py
+    # 따라서 상위 디렉토리가 프로젝트 루트
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(base_dir, 'data')
+    train_path = os.path.join(data_dir, 'train.csv')
+    test_path = os.path.join(data_dir, 'test.csv')
+    sub_path = os.path.join(data_dir, 'sample_submission.csv')
+    
+    return train_path, test_path, sub_path
 
 def load_data():
-    df_train = pd.read_csv('../data/train.csv')
-    df_test = pd.read_csv('../data/test.csv')
-    df_sub = pd.read_csv('../data/sample_submission.csv')
+    """
+    데이터 로드 함수
+    
+    Returns:
+    --------
+    tuple
+        (df_train, df_test, df_sub)
+    """
+    train_path, test_path, sub_path = get_data_paths()
+    
+    print(f"📂 데이터 경로:")
+    print(f"  Train: {train_path}")
+    print(f"  Test: {test_path}")
+    print(f"  Submission: {sub_path}")
+    
+    df_train = pd.read_csv(train_path)
+    df_test = pd.read_csv(test_path)
+    df_sub = pd.read_csv(sub_path)
     
     return df_train, df_test, df_sub
 

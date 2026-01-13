@@ -11,6 +11,10 @@ xgboost>=2.0.0
 # Hyperparameter optimization
 optuna>=3.0.0
 
+# Statistical analysis
+statsmodels>=0.14.0
+seaborn>=0.12.0
+
 # GPU support (optional - install if you have NVIDIA GPU)
 # CUDA toolkit should be installed separately
 # For XGBoost GPU: pip install xgboost --upgrade

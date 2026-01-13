@@ -15,9 +15,6 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
 
-# 하이퍼파라미터 최적화
-import optuna
-from optuna import Trial
 
 
 def check_gpu_availability():
@@ -261,19 +258,16 @@ class XGBoostModel(BaseModel):
             'verbosity': 0,
         }
         
-        # GPU 설정
+        # GPU 설정 (XGBoost 2.0+에서는 tree_method='hist'와 device 파라미터 사용)
         self.use_gpu = False  # 실제 GPU 사용 여부 플래그
         if use_gpu:
             gpu_device = get_gpu_device()
             if gpu_device is not None:
                 # GPU 설정 시도 (실제 지원 여부는 fit에서 확인)
-                default_params['tree_method'] = 'gpu_hist'
-                # XGBoost 3.1+에서는 device에 'cuda:0' 형식으로 GPU 번호 포함
+                default_params['tree_method'] = 'hist'  # gpu_hist는 더 이상 지원되지 않음
+                # XGBoost 2.0+에서는 device에 'cuda:0' 형식으로 GPU 번호 포함
                 default_params['device'] = f'cuda:{gpu_device}'
-                print(f"🔄 XGBoost: GPU 사용 시도 (Device: cuda:{gpu_device})")
-                print("   (GPU 지원이 없으면 자동으로 CPU로 전환됩니다)")
             else:
-                print("⚠️ XGBoost: GPU 디바이스를 찾을 수 없습니다. CPU로 학습합니다.")
                 default_params['tree_method'] = 'hist'
         else:
             # CPU 기본값 설정
@@ -319,8 +313,6 @@ class XGBoostModel(BaseModel):
             error_msg = str(e).lower()
             # GPU 관련 오류인 경우 CPU로 전환
             if 'gpu' in error_msg or 'gpu_hist' in error_msg or 'cuda' in error_msg:
-                print(f"⚠️ XGBoost GPU 학습 실패: {str(e)[:100]}")
-                print("🔄 CPU로 자동 전환하여 학습합니다...")
                 # CPU 파라미터로 변경
                 cpu_params = self.params.copy()
                 cpu_params['tree_method'] = 'hist'
@@ -358,232 +350,6 @@ class XGBoostModel(BaseModel):
             raise ValueError("Model must be fitted before prediction")
         test_data = xgb.DMatrix(X)
         return self.model.predict(test_data)
-
-
-class HyperparameterOptimizer:
-    """Optuna를 사용한 하이퍼파라미터 최적화 클래스"""
-    
-    def __init__(self, task_type: str = 'regression', random_state: int = 42):
-        """
-        Parameters:
-        -----------
-        task_type : str
-            작업 타입 ('regression' or 'classification')
-        random_state : int
-            랜덤 시드
-        """
-        self.task_type = task_type
-        self.random_state = random_state
-        self.best_params = {}
-        
-    def optimize_catboost(self, X_train, y_train, n_trials: int = 50, 
-                         cat_features: Optional[List] = None, **kwargs):
-        """
-        CatBoost 하이퍼파라미터 최적화
-        
-        Parameters:
-        -----------
-        X_train : pd.DataFrame or np.ndarray
-            학습 데이터
-        y_train : pd.Series or np.ndarray
-            타겟 데이터
-        n_trials : int
-            Optuna 시도 횟수
-        cat_features : List, optional
-            범주형 특성 리스트
-        **kwargs
-            추가 파라미터
-            
-        Returns:
-        --------
-        dict
-            최적화된 하이퍼파라미터
-        """
-        from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-        
-        def objective(trial):
-            if self.task_type == 'regression':
-                params = {
-                    'iterations': trial.suggest_int('iterations', 100, 2000),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'depth': trial.suggest_int('depth', 4, 10),
-                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1, 100, log=True),
-                    'random_strength': trial.suggest_float('random_strength', 0, 1),
-                    'bagging_temperature': trial.suggest_float('bagging_temperature', 0, 1),
-                    'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS']),
-                    'random_state': self.random_state,
-                    'verbose': False,
-                    'allow_writing_files': False,
-                }
-                model = CatBoostRegressor(**params)
-                scoring = 'neg_mean_squared_error'
-            else:
-                params = {
-                    'iterations': trial.suggest_int('iterations', 100, 2000),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'depth': trial.suggest_int('depth', 4, 10),
-                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1, 100, log=True),
-                    'random_strength': trial.suggest_float('random_strength', 0, 1),
-                    'bagging_temperature': trial.suggest_float('bagging_temperature', 0, 1),
-                    'bootstrap_type': trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS']),
-                    'random_state': self.random_state,
-                    'verbose': False,
-                    'allow_writing_files': False,
-                }
-                model = CatBoostClassifier(**params)
-                scoring = 'roc_auc'
-            
-            # K-Fold 교차 검증
-            if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            else:
-                cv = KFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            
-            scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1)
-            
-            if self.task_type == 'regression':
-                return -scores.mean()  # RMSE는 최소화
-            else:
-                return scores.mean()  # AUC는 최대화
-        
-        study = optuna.create_study(
-            direction='minimize' if self.task_type == 'regression' else 'maximize',
-            sampler=optuna.samplers.TPESampler(seed=self.random_state)
-        )
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
-        
-        self.best_params['catboost'] = study.best_params
-        return study.best_params
-    
-    def optimize_lightgbm(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """
-        LightGBM 하이퍼파라미터 최적화
-        """
-        from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-        
-        def objective(trial):
-            if self.task_type == 'regression':
-                params = {
-                    'objective': 'regression',
-                    'metric': 'rmse',
-                    'boosting_type': 'gbdt',
-                    'num_leaves': trial.suggest_int('num_leaves', 31, 255),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
-                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 20, 200),
-                    'feature_fraction': trial.suggest_float('feature_fraction', 0.5, 1.0),
-                    'bagging_fraction': trial.suggest_float('bagging_fraction', 0.5, 1.0),
-                    'bagging_freq': trial.suggest_int('bagging_freq', 1, 7),
-                    'lambda_l1': trial.suggest_float('lambda_l1', 1e-3, 10.0, log=True),
-                    'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
-                    'random_state': self.random_state,
-                    'verbosity': -1,
-                }
-                model = lgb.LGBMRegressor(**params)
-                scoring = 'neg_mean_squared_error'
-            else:
-                params = {
-                    'objective': 'binary',
-                    'metric': 'binary_logloss',
-                    'boosting_type': 'gbdt',
-                    'num_leaves': trial.suggest_int('num_leaves', 31, 255),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
-                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 20, 200),
-                    'feature_fraction': trial.suggest_float('feature_fraction', 0.5, 1.0),
-                    'bagging_fraction': trial.suggest_float('bagging_fraction', 0.5, 1.0),
-                    'bagging_freq': trial.suggest_int('bagging_freq', 1, 7),
-                    'lambda_l1': trial.suggest_float('lambda_l1', 1e-3, 10.0, log=True),
-                    'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
-                    'random_state': self.random_state,
-                    'verbosity': -1,
-                }
-                model = lgb.LGBMClassifier(**params)
-                scoring = 'roc_auc'
-            
-            if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            else:
-                cv = KFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            
-            scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1)
-            
-            if self.task_type == 'regression':
-                return -scores.mean()
-            else:
-                return scores.mean()
-        
-        study = optuna.create_study(
-            direction='minimize' if self.task_type == 'regression' else 'maximize',
-            sampler=optuna.samplers.TPESampler(seed=self.random_state)
-        )
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
-        
-        self.best_params['lightgbm'] = study.best_params
-        return study.best_params
-    
-    def optimize_xgboost(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """
-        XGBoost 하이퍼파라미터 최적화
-        """
-        from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-        
-        def objective(trial):
-            if self.task_type == 'regression':
-                params = {
-                    'objective': 'reg:squarederror',
-                    'eval_metric': 'rmse',
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-                    'gamma': trial.suggest_float('gamma', 0, 1),
-                    'reg_alpha': trial.suggest_float('reg_alpha', 1e-3, 10.0, log=True),
-                    'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
-                    'random_state': self.random_state,
-                    'verbosity': 0,
-                }
-                model = xgb.XGBRegressor(**params)
-                scoring = 'neg_mean_squared_error'
-            else:
-                params = {
-                    'objective': 'binary:logistic',
-                    'eval_metric': 'logloss',
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-                    'gamma': trial.suggest_float('gamma', 0, 1),
-                    'reg_alpha': trial.suggest_float('reg_alpha', 1e-3, 10.0, log=True),
-                    'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
-                    'random_state': self.random_state,
-                    'verbosity': 0,
-                }
-                model = xgb.XGBClassifier(**params)
-                scoring = 'roc_auc'
-            
-            if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            else:
-                cv = KFold(n_splits=5, shuffle=True, random_state=self.random_state)
-            
-            scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=-1)
-            
-            if self.task_type == 'regression':
-                return -scores.mean()
-            else:
-                return scores.mean()
-        
-        study = optuna.create_study(
-            direction='minimize' if self.task_type == 'regression' else 'maximize',
-            sampler=optuna.samplers.TPESampler(seed=self.random_state)
-        )
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
-        
-        self.best_params['xgboost'] = study.best_params
-        return study.best_params
 
 
 class ModelTrainer:
@@ -629,56 +395,37 @@ class ModelTrainer:
         **kwargs
             모델별 하이퍼파라미터
         """
+        # kwargs에서 random_state 제거 (중복 전달 방지)
+        kwargs_clean = {k: v for k, v in kwargs.items() if k != 'random_state'}
+        
         if model_type == 'catboost':
             return CatBoostModel(
                 task_type=self.task_type,
                 random_state=self.random_state,
                 cat_features=cat_features,
                 use_gpu=self.use_gpu,
-                **kwargs
+                **kwargs_clean
             )
         elif model_type == 'lightgbm':
             return LightGBMModel(
                 task_type=self.task_type,
                 random_state=self.random_state,
                 use_gpu=self.use_gpu,
-                **kwargs
+                **kwargs_clean
             )
         elif model_type == 'xgboost':
             return XGBoostModel(
                 task_type=self.task_type,
                 random_state=self.random_state,
                 use_gpu=self.use_gpu,
-                **kwargs
+                **kwargs_clean
             )
         else:
             raise ValueError(f"Unknown model_type: {model_type}")
     
     def train_with_cv(self, X, y, model_type: str, n_folds: int = 5, 
                      cat_features: Optional[List] = None, **model_params):
-        """
-        K-Fold 교차 검증으로 모델 학습
-        
-        Parameters:
-        -----------
-        X : pd.DataFrame or np.ndarray
-            학습 데이터
-        y : pd.Series or np.ndarray
-            타겟 데이터
-        model_type : str
-            모델 타입 ('catboost', 'lightgbm', 'xgboost')
-        n_folds : int
-            K-Fold 개수
-        cat_features : List, optional
-            범주형 특성 리스트
-        **model_params
-            모델별 하이퍼파라미터
-            
-        Returns:
-        --------
-        dict
-            학습된 모델들, OOF 예측, CV 점수
-        """
+
         # K-Fold 설정
         if self.task_type == 'classification':
             kf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
@@ -688,10 +435,6 @@ class ModelTrainer:
         models = []
         oof_preds = np.zeros(len(X))
         fold_scores = []
-        
-        print(f"\n{'='*60}")
-        print(f"🚀 {model_type.upper()} 모델 학습 시작 (K-Fold={n_folds})")
-        print(f"{'='*60}")
         
         for fold, (train_idx, val_idx) in enumerate(kf.split(X, y), 1):
             print(f"\n📊 Fold {fold}/{n_folds} 학습 중...")
@@ -765,27 +508,85 @@ class ModelTrainer:
         }
     
     def predict_test(self, X_test, model_type: str):
-        """
-        테스트 데이터 예측 (앙상블: 모든 fold 모델의 평균)
-        
-        Parameters:
-        -----------
-        X_test : pd.DataFrame or np.ndarray
-            테스트 데이터
-        model_type : str
-            모델 타입
-            
-        Returns:
-        --------
-        np.ndarray
-            예측 결과
-        """
+
         if model_type not in self.models:
             raise ValueError(f"Model {model_type} not found. Train the model first.")
         
         models = self.models[model_type]
         predictions = np.array([model.predict(X_test) for model in models])
         return predictions.mean(axis=0)
+    
+    def get_feature_importance(self, model_type: str, feature_names: List[str], 
+                              average_across_folds: bool = True) -> pd.DataFrame:
+
+        if model_type not in self.models:
+            raise ValueError(f"Model {model_type} not found. Train the model first.")
+        
+        models = self.models[model_type]
+        n_folds = len(models)
+        
+        # 각 Fold의 feature importance 추출
+        fold_importances = []
+        for fold_idx, model in enumerate(models):
+            try:
+                # 각 모델 클래스의 get_feature_importance 메서드 사용
+                if model_type == 'catboost':
+                    importance = model.get_feature_importance()
+                elif model_type == 'lightgbm':
+                    importance = model.get_feature_importance()
+                elif model_type == 'xgboost':
+                    # XGBoost는 BaseModel의 get_feature_importance() 사용 (파라미터 없음)
+                    importance = model.get_feature_importance()
+                else:
+                    importance = None
+                
+                # importance 길이 확인
+                if importance is not None:
+                    if len(importance) != len(feature_names):
+                        print(f"⚠️ Warning: Feature importance length ({len(importance)}) != feature names length ({len(feature_names)}) for {model_type} Fold {fold_idx + 1}")
+                        # 길이가 맞지 않으면 0으로 패딩
+                        if len(importance) < len(feature_names):
+                            importance = np.pad(importance, (0, len(feature_names) - len(importance)), 'constant')
+                        elif len(importance) > len(feature_names):
+                            importance = importance[:len(feature_names)] # 너무 길면 자르기
+                    
+                    # 정규화 (합이 1이 되도록)
+                    if np.sum(importance) > 0:
+                        importance = importance / np.sum(importance)
+                    fold_importances.append(importance)
+            except Exception as e:
+                print(f"⚠️ Fold {fold_idx + 1}의 feature importance 추출 실패: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        if len(fold_importances) == 0:
+            return pd.DataFrame()
+        
+        fold_importances = np.array(fold_importances)
+        
+        if average_across_folds:
+            # Fold별 평균
+            mean_importance = np.mean(fold_importances, axis=0)
+            std_importance = np.std(fold_importances, axis=0)
+            
+            importance_df = pd.DataFrame({
+                'Feature': feature_names,
+                'Importance': mean_importance,
+                'Std': std_importance
+            }).sort_values('Importance', ascending=False)
+        else:
+            # 각 Fold별 중요도
+            importance_dict = {'Feature': feature_names}
+            for fold_idx in range(len(fold_importances)):
+                importance_dict[f'Fold_{fold_idx+1}'] = fold_importances[fold_idx]
+            importance_df = pd.DataFrame(importance_dict)
+            # 평균과 표준편차도 추가
+            importance_df['Mean'] = importance_df[[f'Fold_{i+1}' for i in range(len(fold_importances))]].mean(axis=1)
+            importance_df['Std'] = importance_df[[f'Fold_{i+1}' for i in range(len(fold_importances))]].std(axis=1)
+            importance_df = importance_df.sort_values('Mean', ascending=False)
+        
+        return importance_df
 
 
 class EnsembleModel:
@@ -800,6 +601,7 @@ class EnsembleModel:
         """
         self.task_type = task_type
         self.weights = None
+        self.ensemble_score = None
         
     def fit(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray, 
             method: str = 'weighted_average', optimize: bool = True):
@@ -835,6 +637,17 @@ class EnsembleModel:
         
         else:
             raise ValueError(f"Unknown method: {method}")
+        
+        # 앙상블 점수 계산 (가중치 기반으로 직접 계산)
+        ensemble_pred = np.zeros_like(list(predictions_dict.values())[0])
+        for name, pred in predictions_dict.items():
+            if self.weights and name in self.weights:
+                ensemble_pred += self.weights[name] * pred
+        
+        if self.task_type == 'regression':
+            self.ensemble_score = np.sqrt(mean_squared_error(y_true, ensemble_pred))
+        else:
+            self.ensemble_score = roc_auc_score(y_true, ensemble_pred)
     
     def _optimize_weights(self, predictions_dict: Dict[str, np.ndarray], 
                          y_true: np.ndarray) -> Dict[str, float]:
@@ -904,69 +717,6 @@ class EnsembleModel:
             ensemble_pred += self.weights[name] * pred
         
         return ensemble_pred
-
-
-def save_hyperparameters(best_params: Dict[str, dict], filepath: str, 
-                         task_type: str = 'regression', additional_info: Optional[dict] = None):
-    """
-    최적화된 하이퍼파라미터를 JSON 파일로 저장
-    
-    Parameters:
-    -----------
-    best_params : dict
-        {model_type: params} 형태의 딕셔너리
-    filepath : str
-        저장할 파일 경로
-    task_type : str
-        작업 타입
-    additional_info : dict, optional
-        추가 정보 (CV 점수, 날짜 등)
-    """
-    import json
-    from datetime import datetime
-    
-    save_data = {
-        'task_type': task_type,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'hyperparameters': best_params
-    }
-    
-    if additional_info:
-        save_data['additional_info'] = additional_info
-    
-    # 디렉토리가 없으면 생성
-    os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
-    
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(save_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n✅ 하이퍼파라미터 저장 완료: {filepath}")
-
-
-def load_hyperparameters(filepath: str) -> Dict[str, dict]:
-    """
-    저장된 하이퍼파라미터를 JSON 파일에서 불러오기
-    
-    Parameters:
-    -----------
-    filepath : str
-        파일 경로
-        
-    Returns:
-    --------
-    dict
-        {model_type: params} 형태의 딕셔너리
-    """
-    import json
-    
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    print(f"\n📂 하이퍼파라미터 불러오기 완료: {filepath}")
-    print(f"  Task Type: {data.get('task_type', 'unknown')}")
-    print(f"  Timestamp: {data.get('timestamp', 'unknown')}")
-    
-    return data.get('hyperparameters', {})
 
 
 def evaluate_model(y_true, y_pred, task_type: str = 'regression'):
