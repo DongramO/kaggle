@@ -1904,3 +1904,297 @@ XGBOOST:
 ✅ 모든 작업 완료!
 ============================================================
 ******************************8.71186 => 카테고리 인터렉션 제거
+
+
+================================================================================
+================================================================================
+새로운 실행 기록 #35
+실행 시간: 2026-01-14 22:10:58
+================================================================================
+================================================================================
+
+============================================================
+📊 학습 결과 요약
+============================================================
+
+실행 시간: 2026-01-14 22:10:57
+GPU 사용: True
+
+모델별 CV Score:
+
+CATBOOST:
+  CV Score: 8.7806 (std: 0.0118)
+  Fold Scores: ['8.7699', '8.7762', '8.7692', '8.7874', '8.8003']
+  사용 컬럼 수: 14개
+  사용 컬럼 리스트: ['age', 'gender', 'course', 'study_hours', 'class_attendance', 'internet_access', 'sleep_hours', 'sleep_quality', 'study_method', 'facility_rating', 'exam_difficulty', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio']
+
+LIGHTGBM:
+  CV Score: 8.7734 (std: 0.0125)
+  Fold Scores: ['8.7648', '8.7637', '8.7639', '8.7788', '8.7957']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+XGBOOST:
+  CV Score: 8.7872 (std: 0.0131)
+  Fold Scores: ['8.7816', '8.7787', '8.7724', '8.7939', '8.8094']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+앙상블 가중치:
+  catboost: 0.3300
+  lightgbm: 0.3400
+  xgboost: 0.3300
+
+앙상블 최종 RMSE: 8.7522
+
+인코딩 설정:
+  One-Hot 컬럼: ['gender', 'course', 'internet_access', 'study_method']
+  Ordinal 컬럼: ['facility_rating', 'sleep_quality', 'exam_difficulty']
+
+제출 파일 정보:
+  경로: C:\Users\30032\OneDrive\바탕 화면\workspace\kaggle\202601_playground\submission.csv
+  파일 크기: 6.71 MB
+  예측 개수: 270000
+  예측값 범위: [14.74, 102.33]
+  예측값 평균: 62.52
+  예측값 표준편차: 16.74
+
+============================================================
+✅ 모든 작업 완료!
+============================================================
+
+
+
+================================================================================
+================================================================================
+새로운 실행 기록 #36
+실행 시간: 2026-01-14 22:39:57
+================================================================================
+================================================================================
+
+============================================================
+📊 학습 결과 요약
+============================================================
+
+실행 시간: 2026-01-14 22:39:57
+GPU 사용: True
+
+모델별 CV Score:
+
+CATBOOST:
+  CV Score: 8.7805 (std: 0.0117)
+  Fold Scores: ['8.7699', '8.7762', '8.7692', '8.7869', '8.8000']
+  사용 컬럼 수: 14개
+  사용 컬럼 리스트: ['age', 'gender', 'course', 'study_hours', 'class_attendance', 'internet_access', 'sleep_hours', 'sleep_quality', 'study_method', 'facility_rating', 'exam_difficulty', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio']
+
+LIGHTGBM:
+  CV Score: 8.7724 (std: 0.0119)
+  Fold Scores: ['8.7632', '8.7637', '8.7634', '8.7788', '8.7929']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+XGBOOST:
+  CV Score: 8.7872 (std: 0.0131)
+  Fold Scores: ['8.7816', '8.7787', '8.7724', '8.7939', '8.8094']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+앙상블 가중치:
+  catboost: 0.3300
+  lightgbm: 0.3400
+  xgboost: 0.3300
+
+앙상블 최종 RMSE: 8.7517
+
+인코딩 설정:
+  One-Hot 컬럼: ['gender', 'course', 'internet_access', 'study_method']
+  Ordinal 컬럼: ['facility_rating', 'sleep_quality', 'exam_difficulty']
+
+제출 파일 정보:
+  경로: C:\Users\30032\OneDrive\바탕 화면\workspace\kaggle\202601_playground\submission.csv
+  파일 크기: 6.71 MB
+  예측 개수: 270000
+  예측값 범위: [14.68, 102.35]
+  예측값 평균: 62.52
+  예측값 표준편차: 16.74
+
+============================================================
+✅ 모든 작업 완료!
+============================================================
+
+
+
+================================================================================
+================================================================================
+새로운 실행 기록 #37
+실행 시간: 2026-01-14 22:59:01
+================================================================================
+================================================================================
+
+============================================================
+📊 학습 결과 요약
+============================================================
+
+실행 시간: 2026-01-14 22:59:01
+GPU 사용: True
+
+모델별 CV Score:
+
+CATBOOST:
+  CV Score: 8.7805 (std: 0.0118)
+  Fold Scores: ['8.7699', '8.7764', '8.7689', '8.7872', '8.8003']
+  사용 컬럼 수: 14개
+  사용 컬럼 리스트: ['age', 'gender', 'course', 'study_hours', 'class_attendance', 'internet_access', 'sleep_hours', 'sleep_quality', 'study_method', 'facility_rating', 'exam_difficulty', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio']
+
+LIGHTGBM:
+  CV Score: 8.7727 (std: 0.0131)
+  Fold Scores: ['8.7632', '8.7637', '8.7618', '8.7788', '8.7957']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+XGBOOST:
+  CV Score: 8.7872 (std: 0.0131)
+  Fold Scores: ['8.7816', '8.7787', '8.7724', '8.7939', '8.8094']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours', 'study_hours_add_sleep_hours', 'study_hours_study_hours_add_sleep_hours_ratio', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded']
+
+앙상블 가중치:
+  catboost: 0.3300
+  lightgbm: 0.3400
+  xgboost: 0.3300
+
+앙상블 최종 RMSE: 8.7517
+
+인코딩 설정:
+  One-Hot 컬럼: ['gender', 'course', 'internet_access', 'study_method']
+  Ordinal 컬럼: ['facility_rating', 'sleep_quality', 'exam_difficulty']
+
+제출 파일 정보:
+  경로: C:\Users\30032\OneDrive\바탕 화면\workspace\kaggle\202601_playground\submission.csv
+  파일 크기: 6.71 MB
+  예측 개수: 270000
+  예측값 범위: [14.69, 102.29]
+  예측값 평균: 62.52
+  예측값 표준편차: 16.74
+
+============================================================
+✅ 모든 작업 완료!
+============================================================
+
+
+
+================================================================================
+================================================================================
+새로운 실행 기록 #38
+실행 시간: 2026-01-14 23:32:13
+================================================================================
+================================================================================
+
+============================================================
+📊 학습 결과 요약
+============================================================
+
+실행 시간: 2026-01-14 23:32:13
+GPU 사용: True
+
+모델별 CV Score:
+
+CATBOOST:
+  CV Score: 8.7781 (std: 0.0119)
+  Fold Scores: ['8.7676', '8.7741', '8.7663', '8.7842', '8.7983']
+  사용 컬럼 수: 14개
+  사용 컬럼 리스트: ['age', 'gender', 'course', 'study_hours', 'class_attendance', 'internet_access', 'sleep_hours', 'sleep_quality', 'study_method', 'facility_rating', 'exam_difficulty', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'class_attendance_x_sleep_quality_encoded_FE']
+
+LIGHTGBM:
+  CV Score: 8.7735 (std: 0.0118)
+  Fold Scores: ['8.7642', '8.7694', '8.7626', '8.7763', '8.7952']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded', 'class_attendance_x_sleep_quality_encoded_FE']
+
+XGBOOST:
+  CV Score: 8.7850 (std: 0.0130)
+  Fold Scores: ['8.7792', '8.7769', '8.7707', '8.7903', '8.8078']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded', 'class_attendance_x_sleep_quality_encoded_FE']
+
+앙상블 가중치:
+  catboost: 0.3300
+  lightgbm: 0.3400
+  xgboost: 0.3300
+
+앙상블 최종 RMSE: 8.7502
+
+인코딩 설정:
+  One-Hot 컬럼: ['gender', 'course', 'internet_access', 'study_method']
+  Ordinal 컬럼: ['facility_rating', 'sleep_quality', 'exam_difficulty']
+
+제출 파일 정보:
+  경로: C:\Users\30032\OneDrive\바탕 화면\workspace\kaggle\202601_playground\submission.csv
+  파일 크기: 6.71 MB
+  예측 개수: 270000
+  예측값 범위: [14.92, 102.06]
+  예측값 평균: 62.52
+  예측값 표준편차: 16.75
+
+============================================================
+✅ 모든 작업 완료!
+============================================================
+
+
+
+================================================================================
+================================================================================
+새로운 실행 기록 #39
+실행 시간: 2026-01-14 23:38:49
+================================================================================
+================================================================================
+
+============================================================
+📊 학습 결과 요약
+============================================================
+
+실행 시간: 2026-01-14 23:38:49
+GPU 사용: True
+
+모델별 CV Score:
+
+CATBOOST:
+  CV Score: 8.7782 (std: 0.0121)
+  Fold Scores: ['8.7676', '8.7741', '8.7659', '8.7850', '8.7982']
+  사용 컬럼 수: 14개
+  사용 컬럼 리스트: ['age', 'gender', 'course', 'study_hours', 'class_attendance', 'internet_access', 'sleep_hours', 'sleep_quality', 'study_method', 'facility_rating', 'exam_difficulty', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'class_attendance_x_sleep_quality_encoded_FE']
+
+LIGHTGBM:
+  CV Score: 8.7730 (std: 0.0116)
+  Fold Scores: ['8.7642', '8.7688', '8.7627', '8.7747', '8.7945']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded', 'class_attendance_x_sleep_quality_encoded_FE']
+
+XGBOOST:
+  CV Score: 8.7850 (std: 0.0130)
+  Fold Scores: ['8.7792', '8.7769', '8.7707', '8.7903', '8.8078']
+  사용 컬럼 수: 27개
+  사용 컬럼 리스트: ['age', 'study_hours', 'class_attendance', 'sleep_hours', 'class_attendance_x_study_hours_FE', 'study_hours_add_sleep_hours_FE', 'gender_female_encoded', 'gender_male_encoded', 'gender_other_encoded', 'course_b.com_encoded', 'course_b.sc_encoded', 'course_b.tech_encoded', 'course_ba_encoded', 'course_bba_encoded', 'course_bca_encoded', 'course_diploma_encoded', 'internet_access_no_encoded', 'internet_access_yes_encoded', 'study_method_coaching_encoded', 'study_method_group study_encoded', 'study_method_mixed_encoded', 'study_method_online videos_encoded', 'study_method_self-study_encoded', 'facility_rating_encoded', 'sleep_quality_encoded', 'exam_difficulty_encoded', 'class_attendance_x_sleep_quality_encoded_FE']
+
+앙상블 가중치:
+  catboost: 0.2862
+  lightgbm: 0.3759
+  xgboost: 0.3379
+
+앙상블 최종 RMSE: 8.7500
+
+인코딩 설정:
+  One-Hot 컬럼: ['gender', 'course', 'internet_access', 'study_method']
+  Ordinal 컬럼: ['facility_rating', 'sleep_quality', 'exam_difficulty']
+
+제출 파일 정보:
+  경로: C:\Users\30032\OneDrive\바탕 화면\workspace\kaggle\202601_playground\submission.csv
+  파일 크기: 6.71 MB
+  예측 개수: 270000
+  예측값 범위: [15.00, 101.98]
+  예측값 평균: 62.52
+  예측값 표준편차: 16.75
+
+============================================================
+✅ 모든 작업 완료!
+============================================================

@@ -131,13 +131,13 @@ def create_interaction_features(
             continue
         
         if op == 'multiply':
-            df[f'{col1}_x_{col2}'] = df[col1] * df[col2]
+            df[f'{col1}_x_{col2}_FE'] = df[col1] * df[col2]
         elif op == 'divide':
-            df[f'{col1}_div_{col2}'] = df[col1] / (df[col2] + eps)
+            df[f'{col1}_div_{col2}_FE'] = df[col1] / (df[col2] + eps)
         elif op == 'add':
-            df[f'{col1}_add_{col2}'] = df[col1] + df[col2]
+            df[f'{col1}_add_{col2}_FE'] = df[col1] + df[col2]
         elif op == 'subtract':
-            df[f'{col1}_subtract_{col2}'] = df[col1] - df[col2]
+            df[f'{col1}_subtract_{col2}_FE'] = df[col1] - df[col2]
         else:
             raise ValueError(f"지원하지 않는 연산: {op}. 'multiply', 'divide', 'add', 'subtract' 중 하나를 사용하세요.")
     

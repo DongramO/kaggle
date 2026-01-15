@@ -24,6 +24,9 @@ if __name__ == "__main__":
     OPTUNA_SAMPLE_SIZE = None  # 예: 50000 (5만 개만 사용)
     USE_SAVED_PARAMS = None  # None으로 설정하면 자동 감지
     
+    # 분석 옵션
+    USE_PERMUTATION_IMPORTANCE = False  # True로 설정하면 Permutation Importance 분석 실행 (시간이 오래 걸림)
+    
     ENCODING_CONFIG = {
         'onehot_cols': ['gender', 'course', 'internet_access', 'study_method'],
         'ordinal_cols': ['facility_rating', 'sleep_quality', 'exam_difficulty'],
@@ -42,7 +45,8 @@ if __name__ == "__main__":
         params_filepath=PARAMS_FILEPATH,
         use_gpu=USE_GPU,
         optuna_sample_size=OPTUNA_SAMPLE_SIZE,
-        encoding_config=ENCODING_CONFIG
+        encoding_config=ENCODING_CONFIG,
+        use_permutation_importance=USE_PERMUTATION_IMPORTANCE
     )
     
     print("\n" + "="*60)

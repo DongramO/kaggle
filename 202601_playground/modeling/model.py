@@ -14,6 +14,7 @@ import xgboost as xgb
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
+from sklearn.inspection import permutation_importance
 
 
 
@@ -587,6 +588,131 @@ class ModelTrainer:
             importance_df = importance_df.sort_values('Mean', ascending=False)
         
         return importance_df
+    
+    def get_permutation_importance(self, model_type: str, X: pd.DataFrame, y: Union[pd.Series, np.ndarray],
+                                   feature_names: Optional[List[str]] = None,
+                                   n_repeats: int = 10, random_state: Optional[int] = None,
+                                   scoring: Optional[str] = None, n_jobs: int = -1) -> pd.DataFrame:
+        """
+        Permutation Importance 계산
+        
+        Parameters:
+        -----------
+        model_type : str
+            모델 타입 ('catboost', 'lightgbm', 'xgboost')
+        X : pd.DataFrame
+            검증 데이터 (특성)
+        y : Union[pd.Series, np.ndarray]
+            검증 데이터 (타겟)
+        feature_names : List[str], optional
+            특성 이름 리스트 (None이면 X.columns 사용)
+        n_repeats : int
+            Permutation 반복 횟수 (기본값: 10)
+        random_state : int, optional
+            랜덤 시드
+        scoring : str, optional
+            평가 지표 ('neg_mean_squared_error', 'roc_auc' 등)
+            None이면 task_type에 따라 자동 선택
+        n_jobs : int
+            병렬 처리 작업 수 (기본값: -1, 모든 CPU 사용)
+            
+        Returns:
+        --------
+        pd.DataFrame
+            Permutation Importance 결과 (Feature, Importance, Std)
+        """
+        if model_type not in self.models:
+            raise ValueError(f"Model {model_type} not found. Train the model first.")
+        
+        if feature_names is None:
+            feature_names = X.columns.tolist()
+        
+        models = self.models[model_type]
+        n_folds = len(models)
+        
+        # scoring 자동 설정
+        if scoring is None:
+            if self.task_type == 'regression':
+                scoring = 'neg_mean_squared_error'
+            else:
+                scoring = 'roc_auc'
+        
+        # 각 Fold의 permutation importance 계산
+        fold_importances = []
+        
+        print(f"\n📊 {model_type.upper()} Permutation Importance 계산 중...")
+        print(f"   반복 횟수: {n_repeats}, Fold 수: {n_folds}")
+        
+        for fold_idx, model in enumerate(models, 1):
+            print(f"   Fold {fold_idx}/{n_folds} 처리 중...", end='\r')
+            
+            try:
+                # 모델의 predict 메서드가 있는지 확인
+                # CatBoost, LightGBM, XGBoost는 모두 sklearn API를 따름
+                if hasattr(model, 'predict'):
+                    # permutation_importance 계산
+                    perm_result = permutation_importance(
+                        model, X, y,
+                        n_repeats=n_repeats,
+                        random_state=random_state if random_state is not None else self.random_state,
+                        scoring=scoring,
+                        n_jobs=n_jobs
+                    )
+                    
+                    # Permutation importance는 원래 점수 - permuted 점수
+                    # neg_mean_squared_error의 경우: 더 큰 값(덜 음수)이 더 중요함
+                    importances = perm_result.importances_mean
+                    if scoring.startswith('neg_'):
+                        # 음수 지표는 반전 (더 큰 값이 더 중요)
+                        importances = -importances
+                    
+                    stds = perm_result.importances_std
+                    
+                    fold_importances.append({
+                        'importances': importances,
+                        'stds': stds
+                    })
+                else:
+                    print(f"   ⚠️ Fold {fold_idx}: 모델에 predict 메서드가 없습니다.")
+            except Exception as e:
+                print(f"   ⚠️ Fold {fold_idx} Permutation Importance 계산 실패: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print()  # 줄바꿈
+        
+        if len(fold_importances) == 0:
+            print("   ⚠️ Permutation Importance를 계산할 수 없습니다.")
+            return pd.DataFrame()
+        
+        # Fold별 평균 및 표준편차 계산
+        all_importances = np.array([fold['importances'] for fold in fold_importances])
+        all_stds = np.array([fold['stds'] for fold in fold_importances])
+        
+        mean_importance = np.mean(all_importances, axis=0)
+        std_importance = np.std(all_importances, axis=0)
+        
+        # 특성 이름과 중요도 길이 확인
+        if len(feature_names) != len(mean_importance):
+            print(f"   ⚠️ Warning: Feature names length ({len(feature_names)}) != importance length ({len(mean_importance)})")
+            if len(feature_names) < len(mean_importance):
+                feature_names = feature_names + [f'Feature_{i}' for i in range(len(feature_names), len(mean_importance))]
+            else:
+                feature_names = feature_names[:len(mean_importance)]
+        
+        importance_df = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': mean_importance,
+            'Std': std_importance
+        }).sort_values('Importance', ascending=False)
+        
+        print(f"   ✅ Permutation Importance 계산 완료!")
+        print(f"   상위 10개 특성:")
+        for idx, row in importance_df.head(10).iterrows():
+            print(f"     {row['Feature']:40s}: {row['Importance']:8.4f} (std: {row['Std']:.4f})")
+        
+        return importance_df
 
 
 class EnsembleModel:
@@ -672,7 +798,7 @@ class EnsembleModel:
         
         # 제약 조건: 가중치 합 = 1, 모든 가중치 >= 0
         constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
-        bounds = [(0, 1) for _ in range(len(model_names))]
+        bounds = [(0.33, 1) for _ in range(len(model_names))]
         
         # 초기값: 동일 가중치
         initial_weights = np.array([1.0 / len(model_names)] * len(model_names))

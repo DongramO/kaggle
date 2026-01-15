@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from preprocess.encoder import fit_encoder, transform_with_encoder, one_hot_encode, ordinal_encode
 from preprocess.feature_engineering import clip_outliers, create_interaction_features, create_ratio_features, create_categorical_interactions
-from eda import analyze_feature_importance
+from eda import analyze_feature_importance, analyze_permutation_importance, analyze_high_error_samples
 from eda.dataload import load_data
 from modeling.model import ModelTrainer, EnsembleModel, evaluate_model
 from modeling.hyperparameter import (
@@ -51,7 +51,7 @@ def prepare_data(df_train, df_test, target_col='exam_score',
     print(f"  수치형 컬럼: {len(numeric_cols)}개")
     print(f"  범주형 컬럼: {len(categorical_cols)}개")
     
-    # Feature Engineering 적용
+    # Feature Engineering 적용 (2단계로 분리)
     if use_feature_engineering:
         print("\n🔧 Feature Engineering 적용 중...")
         # 간단한 설정 예제 (필요에 따라 수정)
@@ -66,23 +66,28 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                 }
             },
             
-            'create_interactions': {
+            'create_interactions_before_encoding': {
                 'flag': True,
                 'feature_pairs': [
                     ('class_attendance', 'study_hours'),
-                    ('class_attendance', 'sleep_quality_encoded'),
                     ('study_hours', 'sleep_hours'),
-                    # ('study_hours', 'sleep_hours')
                 ],
                 'operations': [
                     'multiply',
-                    'multiply',
                     'add',
-                    # 'multiply',
-                ]  # 각 pair에 순서대로 매핑
+                ]
+            },
+            
+            'create_interactions_after_encoding': {
+                'flag': True,
+                'feature_pairs': [
+                    ('class_attendance', 'sleep_quality_encoded'),
+                ],
+                'operations': [
+                    'multiply',
+                ]
             },
         
-            
             'create_frequency': {
                 'flag': False
             },
@@ -107,35 +112,31 @@ def prepare_data(df_train, df_test, target_col='exam_score',
             }
         }
         
-        # Feature Engineering 적용
+        # ========== Feature Engineering 1단계: 인코딩 전 ==========
+        print("  📌 1단계: 인코딩 전 Feature Engineering")
+        
+        # 이상치 클리핑
         clip_cfg = config.get('clip_outliers', {})
         if clip_cfg.get('flag', False):
             clip_rules = clip_cfg.get('clip_rules', None)
             X_train = clip_outliers(X_train, numeric_cols, clip_rules)
             X_test = clip_outliers(X_test, numeric_cols, clip_rules)
         
-        interaction_cfg = config.get('create_interactions', {})
-        if interaction_cfg.get('flag', False):
-            feature_pairs = interaction_cfg.get('feature_pairs', [])
-            operations = interaction_cfg.get('operations', [])
-            X_train = create_interaction_features(X_train, feature_pairs, operations)
-            X_test = create_interaction_features(X_test, feature_pairs, operations)
-
-        ratio_cfg = config.get('create_ratios', {})
-        if ratio_cfg.get('flag', False):
-            numerator_cols = ratio_cfg.get('numerator_cols', [])
-            denominator_cols = ratio_cfg.get('denominator_cols', [])
-            feature_names = ratio_cfg.get('ratio_feature_names', None)
-            X_train = create_ratio_features(X_train, numerator_cols, denominator_cols, feature_names)
-            X_test = create_ratio_features(X_test, numerator_cols, denominator_cols, feature_names)
-        
+        # 범주형 조합 특성 생성 (인코딩 전에만 가능)
         # cat_interaction_cfg = config.get('create_categorical_interactions', {})
         # if cat_interaction_cfg.get('flag', False):
         #     categorical_pairs = cat_interaction_cfg.get('categorical_pairs', [])
         #     separator = cat_interaction_cfg.get('separator', '_')
         #     X_train = create_categorical_interactions(X_train, categorical_pairs, separator)
         #     X_test = create_categorical_interactions(X_test, categorical_pairs, separator)
-
+        
+        # 인코딩 전 수치형 조합 (인코딩된 컬럼을 사용하지 않는 것들)
+        interaction_before_cfg = config.get('create_interactions_before_encoding', {})
+        if interaction_before_cfg.get('flag', False):
+            feature_pairs = interaction_before_cfg.get('feature_pairs', [])
+            operations = interaction_before_cfg.get('operations', [])
+            X_train = create_interaction_features(X_train, feature_pairs, operations)
+            X_test = create_interaction_features(X_test, feature_pairs, operations)
 
         # 업데이트된 컬럼 리스트
         numeric_cols = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
@@ -237,6 +238,36 @@ def prepare_data(df_train, df_test, target_col='exam_score',
         
         
         print(f"  원본 범주형 컬럼 유지: {len(categorical_cols_for_encoding)}개 (CatBoost용)")
+    
+    # ========== Feature Engineering 2단계: 인코딩 후 ==========
+    if use_feature_engineering:
+        print("\n  📌 2단계: 인코딩 후 Feature Engineering")
+        
+        # 인코딩 후 수치형 조합 (인코딩된 컬럼을 사용할 수 있는 것들)
+        interaction_after_cfg = config.get('create_interactions_after_encoding', {})
+        if interaction_after_cfg.get('flag', False):
+            feature_pairs = interaction_after_cfg.get('feature_pairs', [])
+            operations = interaction_after_cfg.get('operations', [])
+       
+
+            X_train = create_interaction_features(X_train, feature_pairs, operations)
+            X_test = create_interaction_features(X_test, feature_pairs, operations)
+        
+        # 비율 특성 생성 (인코딩 후에도 가능)
+        ratio_cfg = config.get('create_ratios', {})
+
+        if ratio_cfg.get('flag', False):
+            numerator_cols = ratio_cfg.get('numerator_cols', [])
+            denominator_cols = ratio_cfg.get('denominator_cols', [])
+            feature_names = ratio_cfg.get('ratio_feature_names', None)
+       
+            X_train = create_ratio_features(X_train, numerator_cols, denominator_cols, feature_names)
+            X_test = create_ratio_features(X_test, numerator_cols, denominator_cols, feature_names)
+          
+        
+        # 최종 컬럼 리스트 업데이트
+        numeric_cols = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_cols = X_train.select_dtypes(include=['object', 'category']).columns.tolist()
     
     # 결측치 처리
     for col in numeric_cols:
@@ -414,7 +445,8 @@ def create_ensemble(oof_predictions, y_train, test_predictions, task_type='regre
 
 def main(use_optuna=False, n_trials=50, use_saved_params=None, 
          params_filepath=None, use_gpu=False,
-         optuna_sample_size=None, encoding_config=None):
+         optuna_sample_size=None, encoding_config=None,
+         use_permutation_importance=False):
 
     print("="*60)
     print("🚀 모델 학습 및 앙상블 시작")
@@ -481,6 +513,31 @@ def main(use_optuna=False, n_trials=50, use_saved_params=None,
     else:
         results['feature_importances'] = None
     
+    # Permutation Importance 분석
+    if use_permutation_importance and analyze_permutation_importance is not None:
+        print(f"\n{'='*60}")
+        print("📊 Permutation Importance 분석 시작")
+        print(f"{'='*60}")
+        
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        feature_importance_dir = os.path.join(base_dir, 'feature_importance_results')
+        
+        permutation_importances = analyze_permutation_importance(
+            trainer=results['trainer'],
+            X_train=X_train,
+            y_train=y_train,
+            categorical_cols=categorical_cols,
+            encoded_cols_tag=encoded_cols_tag,
+            top_n=30,
+            n_repeats=10,
+            save_dir=feature_importance_dir
+        )
+        results['permutation_importances'] = permutation_importances
+    else:
+        if use_permutation_importance:
+            print(f"\n⚠️ Permutation Importance 분석을 요청했지만 analyze_permutation_importance를 사용할 수 없습니다.")
+        results['permutation_importances'] = None
+    
     # 앙상블 생성
     ensemble_pred, ensemble = create_ensemble(
         results['oof_predictions'],
@@ -488,6 +545,38 @@ def main(use_optuna=False, n_trials=50, use_saved_params=None,
         results['test_predictions'],
         task_type='regression'
     )
+    
+    # 앙상블 OOF 예측 계산 (오차 분석용)
+    ensemble_oof_pred = np.zeros_like(list(results['oof_predictions'].values())[0])
+    for name, pred in results['oof_predictions'].items():
+        if hasattr(ensemble, 'weights') and ensemble.weights and name in ensemble.weights:
+            ensemble_oof_pred += ensemble.weights[name] * pred
+    
+    # 오차가 큰 샘플 분석
+    if analyze_high_error_samples is not None:
+        print(f"\n{'='*60}")
+        print("📊 오차가 큰 샘플 분석 시작")
+        print(f"{'='*60}")
+        
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        error_analysis_dir = os.path.join(base_dir, 'error_analysis_results')
+        
+        # 원본 학습 데이터 로드 (오차 분석용)
+        df_train_original, _, _ = load_data()
+        
+        # 오차 분석 수행
+        error_samples = analyze_high_error_samples(
+            trainer=results['trainer'],
+            X_train=df_train_original.drop(columns=['exam_score'] if 'exam_score' in df_train_original.columns else []),
+            y_train=y_train,
+            ensemble_pred=ensemble_oof_pred,
+            top_n=100,
+            error_threshold=None,  # 자동 설정
+            save_dir=error_analysis_dir
+        )
+        results['error_samples'] = error_samples
+    else:
+        results['error_samples'] = None
     
     # 제출 파일 생성
     print("\n📝 제출 파일 생성 중...")

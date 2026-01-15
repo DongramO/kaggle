@@ -685,7 +685,7 @@ def find_optimal_weights(models, preprocessor_list):
         'fun': lambda w: np.sum(w) - 1
     })
     # 최소 weight 제약 추가 (각 모델이 최소 5% 이상 기여하도록)
-    min_w = 0.05
+    min_w = 0.33
     bounds = [(min_w, 1)] * 3
 
     # 목적 함수: logloss 최소화

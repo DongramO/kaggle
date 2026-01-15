@@ -16,6 +16,120 @@ except ImportError:
     print("⚠️ matplotlib/seaborn이 설치되어 있지 않아 시각화를 사용할 수 없습니다.")
 
 
+def analyze_permutation_importance(trainer, X_train: pd.DataFrame, y_train: pd.Series,
+                                   categorical_cols: List[str], encoded_cols_tag: str = '_encoded',
+                                   top_n: int = 20, n_repeats: int = 10, 
+                                   save_dir: str = 'feature_importance_results'):
+    """
+    Permutation Importance 분석 및 시각화
+    
+    Parameters:
+    -----------
+    trainer : ModelTrainer
+        학습된 모델을 포함한 ModelTrainer 객체
+    X_train : pd.DataFrame
+        학습 데이터 (검증용)
+    y_train : pd.Series
+        타겟 데이터 (검증용)
+    categorical_cols : List[str]
+        범주형 컬럼 리스트
+    encoded_cols_tag : str
+        인코딩된 컬럼 태그
+    top_n : int
+        상위 N개 특성만 표시
+    n_repeats : int
+        Permutation 반복 횟수
+    save_dir : str
+        결과 저장 디렉토리
+        
+    Returns:
+    --------
+    dict or None
+        모델별 Permutation Importance 딕셔너리
+    """
+    if not VISUALIZATION_AVAILABLE:
+        print("⚠️ matplotlib/seaborn이 설치되어 있지 않아 시각화를 건너뜁니다.")
+        return None
+    
+    # 저장 디렉토리 생성
+    Path(save_dir).mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n{'='*60}")
+    print("📊 Permutation Importance 분석")
+    print(f"{'='*60}")
+    
+    encoded_cols = [col for col in X_train.columns if col.endswith(encoded_cols_tag)]
+    all_importances = {}
+    
+    # 모델별로 Permutation Importance 추출
+    for model_type in ['catboost', 'lightgbm', 'xgboost']:
+        if model_type not in trainer.models:
+            print(f"⚠️ {model_type} 모델이 없습니다. 건너뜁니다.")
+            continue
+        
+        print(f"\n🔍 {model_type.upper()} Permutation Importance 추출 중...")
+        
+        # 모델별 특성 선택
+        if model_type == 'catboost':
+            feature_cols = [col for col in X_train.columns if col not in encoded_cols]
+        else:
+            feature_cols = [col for col in X_train.columns if col not in categorical_cols]
+        
+        try:
+            importance_df = trainer.get_permutation_importance(
+                model_type=model_type,
+                X=X_train[feature_cols],
+                y=y_train,
+                feature_names=feature_cols,
+                n_repeats=n_repeats,
+                random_state=trainer.random_state
+            )
+            
+            if len(importance_df) > 0:
+                all_importances[model_type] = importance_df
+                
+                # CSV 저장
+                csv_path = os.path.join(save_dir, f'{model_type}_permutation_importance.csv')
+                importance_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+                print(f"   ✅ 저장: {csv_path}")
+                
+                # 상위 N개 출력
+                print(f"\n   상위 {top_n}개 특성:")
+                for idx, row in importance_df.head(top_n).iterrows():
+                    print(f"     {idx+1:2d}. {row['Feature']:40s}: {row['Importance']:8.4f} (std: {row['Std']:.4f})")
+            else:
+                print(f"   ⚠️ Permutation Importance를 추출할 수 없습니다.")
+        except Exception as e:
+            print(f"   ⚠️ {model_type} Permutation Importance 추출 실패: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    if len(all_importances) == 0:
+        print("\n⚠️ 추출된 Permutation Importance가 없습니다.")
+        return None
+    
+    # 시각화
+    print(f"\n📈 Permutation Importance 시각화 중...")
+    
+    # 1. 모델별 상위 N개 특성 비교
+    _plot_model_comparison(all_importances, top_n, save_dir, suffix='permutation')
+    
+    # 2. 모든 모델의 상위 N개 특성을 하나의 그래프로 (누적 막대)
+    if len(all_importances) > 1:
+        _plot_combined_comparison(all_importances, top_n, save_dir, suffix='permutation')
+    
+    # 3. 공통 중요 특성 찾기 및 저장
+    if len(all_importances) > 1:
+        _find_and_save_common_features(all_importances, top_n, save_dir, suffix='permutation')
+    
+    print(f"\n{'='*60}")
+    print(f"✅ Permutation Importance 분석 완료!")
+    print(f"   결과 저장 위치: {save_dir}/")
+    print(f"{'='*60}")
+    
+    return all_importances
+
+
 def analyze_feature_importance(trainer, X_train: pd.DataFrame, 
                                categorical_cols: List[str], encoded_cols_tag: str = '_encoded',
                                top_n: int = 20, save_dir: str = 'feature_importance_results'):
@@ -122,7 +236,7 @@ def analyze_feature_importance(trainer, X_train: pd.DataFrame,
     return all_importances
 
 
-def _plot_model_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str):
+def _plot_model_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str, suffix: str = ''):
     """
     모델별 상위 N개 특성 비교 그래프 생성
     
@@ -152,13 +266,14 @@ def _plot_model_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int,
         axes[idx].invert_yaxis()
     
     plt.tight_layout()
-    plot_path = os.path.join(save_dir, 'feature_importance_comparison.png')
+    filename = f'feature_importance_comparison.png' if suffix == '' else f'permutation_importance_comparison.png'
+    plot_path = os.path.join(save_dir, filename)
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"   ✅ 저장: {plot_path}")
     plt.close()
 
 
-def _plot_combined_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str):
+def _plot_combined_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str, suffix: str = ''):
     """
     모든 모델의 상위 N개 특성을 하나의 그래프로 비교 (누적 막대)
     
@@ -202,13 +317,14 @@ def _plot_combined_comparison(all_importances: Dict[str, pd.DataFrame], top_n: i
         ax.grid(axis='x', alpha=0.3)
         
         plt.tight_layout()
-        plot_path = os.path.join(save_dir, 'feature_importance_combined.png')
+        filename = f'feature_importance_combined.png' if suffix == '' else f'permutation_importance_combined.png'
+        plot_path = os.path.join(save_dir, filename)
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
         print(f"   ✅ 저장: {plot_path}")
         plt.close()
 
 
-def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str):
+def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str, suffix: str = ''):
     """
     공통 중요 특성 찾기 및 저장
     
@@ -259,7 +375,8 @@ def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top
             {'Feature': feat, 'Average_Importance': imp} 
             for feat, imp in sorted_common
         ])
-        csv_path = os.path.join(save_dir, 'common_important_features.csv')
+        filename = 'common_important_features.csv' if suffix == '' else 'common_important_features_permutation.csv'
+        csv_path = os.path.join(save_dir, filename)
         common_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
         print(f"   ✅ 저장: {csv_path}")
     else:
