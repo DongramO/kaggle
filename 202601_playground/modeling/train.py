@@ -71,6 +71,7 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                 'feature_pairs': [
                     ('class_attendance', 'study_hours'),
                     ('study_hours', 'sleep_hours'),
+                   
                 ],
                 'operations': [
                     'multiply',
@@ -82,8 +83,14 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                 'flag': True,
                 'feature_pairs': [
                     ('class_attendance', 'sleep_quality_encoded'),
+                    ('study_hours', 'sleep_quality_encoded'),
+                    ('study_hours', 'facility_rating_encoded'),
+                    ('study_hours', 'exam_difficulty_encoded'),
                 ],
                 'operations': [
+                    'multiply',
+                    'multiply',
+                    'multiply',
                     'multiply',
                 ]
             },
@@ -96,9 +103,11 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                 'flag': True,
                 'numerator_cols': [
                     'study_hours',
+                    'class_attendance',
                 ],
                 'denominator_cols': [
                     'study_hours_add_sleep_hours',
+                    'study_hours',
                 ],
                 'ratio_feature_names': "_ratio"
             },
@@ -144,6 +153,7 @@ def prepare_data(df_train, df_test, target_col='exam_score',
     
     # 범주형 인코딩 (LightGBM, XGBoost용)
     encoder = None
+
     original_categorical_cols = original_categorical_cols_before_fe.copy()  # CatBoost용 원본 범주형 컬럼 저장 (FE 전)
     encoded_cols_tag = '_encoded'  # 인코딩된 컬럼 태그
     
@@ -393,6 +403,8 @@ def train_models(X_train, y_train, X_test, categorical_cols, task_type='regressi
             print(f"    범주형 컬럼: {actual_categorical_cols}")
         else:
             cat_features = None
+            print(f"  사용 컬럼: 범주형 {len(actual_categorical_cols)}개 (원본 + 조합 특성 포함) + 수치형 {actual_numeric_cols}")
+            print(f"    총 피처 수: {len(feature_cols)}개")
             print(f"  사용 컬럼: 인코딩된 컬럼 {len(encoded_cols)}개 + 수치형 (원본 범주형 컬럼 제외)")
         
         print('model_configs[model_type]:', model_configs[model_type])

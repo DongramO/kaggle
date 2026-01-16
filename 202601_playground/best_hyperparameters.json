@@ -1,50 +1,50 @@
 {
   "task_type": "regression",
-  "timestamp": "2026-01-14 23:38:49",
+  "timestamp": "2026-01-16 02:11:26",
   "hyperparameters": {
     "xgboost": {
-      "max_depth": 8,
-      "learning_rate": 0.12449778916714217,
+      "max_depth": 9,
+      "learning_rate": 0.09502515414171657,
       "min_child_weight": 2,
-      "subsample": 0.9979534750645414,
-      "colsample_bytree": 0.8000019904656703,
-      "gamma": 0.045799100222398095,
-      "reg_alpha": 4.200183853418072,
-      "reg_lambda": 0.008095676151642993
+      "subsample": 0.9623063034305818,
+      "colsample_bytree": 0.8089192953608054,
+      "gamma": 0.0385229741723537,
+      "reg_alpha": 0.00881239977134236,
+      "reg_lambda": 0.0032482615730887524
     },
     "catboost": {
       "bootstrap_type": "Bernoulli",
-      "iterations": 1854,
-      "learning_rate": 0.07390623943661642,
+      "iterations": 1855,
+      "learning_rate": 0.10395528569320524,
       "depth": 6,
-      "l2_leaf_reg": 1.7125849259782566,
-      "random_strength": 0.2886430601975937
+      "l2_leaf_reg": 1.598339345288388,
+      "random_strength": 0.29011571879954295
     },
     "lightgbm": {
-      "num_leaves": 133,
-      "learning_rate": 0.13704339871765167,
-      "max_depth": 12,
-      "min_data_in_leaf": 61,
-      "feature_fraction": 0.5873235196554198,
-      "bagging_fraction": 0.921219255365293,
-      "bagging_freq": 4,
-      "lambda_l1": 1.0912335628377021,
-      "lambda_l2": 0.00569213402841385
+      "num_leaves": 170,
+      "learning_rate": 0.12656419709425507,
+      "max_depth": 10,
+      "min_data_in_leaf": 124,
+      "feature_fraction": 0.8480718152661672,
+      "bagging_fraction": 0.9908567339445062,
+      "bagging_freq": 6,
+      "lambda_l1": 1.2021090902366525,
+      "lambda_l2": 1.538592976799102
     }
   },
   "additional_info": {
     "cv_scores": {
       "catboost": {
-        "mean": 8.778157450957943,
-        "std": 0.012071624174548561
+        "mean": 8.769524996313388,
+        "std": 0.011301175797262752
       },
       "lightgbm": {
-        "mean": 8.773000161576444,
-        "std": 0.011551244518869436
+        "mean": 9.35411740523188,
+        "std": 0.013840835421157377
       },
       "xgboost": {
-        "mean": 8.785002395468531,
-        "std": 0.01303727955418388
+        "mean": 9.378529873465558,
+        "std": 0.01269660993252514
       }
     },
     "is_optimized": false,
