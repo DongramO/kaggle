@@ -1,53 +1,53 @@
 {
   "task_type": "regression",
-  "timestamp": "2026-01-16 02:11:26",
+  "timestamp": "2026-01-16 11:51:34",
   "hyperparameters": {
     "xgboost": {
-      "max_depth": 9,
-      "learning_rate": 0.09502515414171657,
-      "min_child_weight": 2,
-      "subsample": 0.9623063034305818,
-      "colsample_bytree": 0.8089192953608054,
-      "gamma": 0.0385229741723537,
-      "reg_alpha": 0.00881239977134236,
-      "reg_lambda": 0.0032482615730887524
+      "max_depth": 8,
+      "learning_rate": 0.0861091630490229,
+      "min_child_weight": 3,
+      "subsample": 0.9363276311531847,
+      "colsample_bytree": 0.8475821878546004,
+      "gamma": 0.31746028501768164,
+      "reg_alpha": 0.9683416403731477,
+      "reg_lambda": 0.0021407420339273646
     },
     "catboost": {
       "bootstrap_type": "Bernoulli",
-      "iterations": 1855,
-      "learning_rate": 0.10395528569320524,
+      "iterations": 1854,
+      "learning_rate": 0.09945293924672832,
       "depth": 6,
-      "l2_leaf_reg": 1.598339345288388,
-      "random_strength": 0.29011571879954295
+      "l2_leaf_reg": 1.7125849259782566,
+      "random_strength": 0.2856364142892501
     },
     "lightgbm": {
-      "num_leaves": 170,
-      "learning_rate": 0.12656419709425507,
-      "max_depth": 10,
-      "min_data_in_leaf": 124,
-      "feature_fraction": 0.8480718152661672,
-      "bagging_fraction": 0.9908567339445062,
+      "num_leaves": 173,
+      "learning_rate": 0.10784298988937857,
+      "max_depth": 9,
+      "min_data_in_leaf": 83,
+      "feature_fraction": 0.5502548853380904,
+      "bagging_fraction": 0.8808609028366424,
       "bagging_freq": 6,
-      "lambda_l1": 1.2021090902366525,
-      "lambda_l2": 1.538592976799102
+      "lambda_l1": 0.21876623320861574,
+      "lambda_l2": 0.0018809260719941468
     }
   },
   "additional_info": {
     "cv_scores": {
       "catboost": {
-        "mean": 8.769524996313388,
-        "std": 0.011301175797262752
+        "mean": 8.769625373255643,
+        "std": 0.010486455392743219
       },
       "lightgbm": {
-        "mean": 9.35411740523188,
-        "std": 0.013840835421157377
+        "mean": 8.759746377850679,
+        "std": 0.013742369574456577
       },
       "xgboost": {
-        "mean": 9.378529873465558,
-        "std": 0.01269660993252514
+        "mean": 8.771277151069386,
+        "std": 0.013670203871166652
       }
     },
-    "is_optimized": false,
-    "note": "기본 파라미터"
+    "is_optimized": true,
+    "note": "Optuna 최적화된 파라미터"
   }
 }

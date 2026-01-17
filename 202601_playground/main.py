@@ -22,10 +22,10 @@ if __name__ == "__main__":
     USE_OPTUNA = True  # True로 설정하면 Optuna 최적화 실행 (시간이 오래 걸림)
     N_TRIALS = 50  # Optuna 시도 횟수 (USE_OPTUNA=True일 때만 사용)
     OPTUNA_SAMPLE_SIZE = None  # 예: 50000 (5만 개만 사용)
-    USE_SAVED_PARAMS = True  # None으로 설정하면 자동 감지
+    USE_SAVED_PARAMS = False  # None으로 설정하면 자동 감지
     
     # 분석 옵션
-    USE_PERMUTATION_IMPORTANCE = False  # True로 설정하면 Permutation Importance 분석 실행 (시간이 오래 걸림)
+    USE_PERMUTATION_IMPORTANCE = True  # True로 설정하면 Permutation Importance 분석 실행 (시간이 오래 걸림)
     
     ENCODING_CONFIG = {
         'onehot_cols': ['gender', 'course', 'internet_access', 'study_method'],
