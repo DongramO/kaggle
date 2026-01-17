@@ -1,6 +1,10 @@
 {
   "task_type": "regression",
+<<<<<<< HEAD
   "timestamp": "2026-01-16 11:51:34",
+=======
+  "timestamp": "2026-01-17 16:57:44",
+>>>>>>> b6f8a9cf10c46063dc35206388bfcef35480dd85
   "hyperparameters": {
     "xgboost": {
       "max_depth": 8,
@@ -35,6 +39,7 @@
   "additional_info": {
     "cv_scores": {
       "catboost": {
+<<<<<<< HEAD
         "mean": 8.769625373255643,
         "std": 0.010486455392743219
       },
@@ -45,6 +50,18 @@
       "xgboost": {
         "mean": 8.771277151069386,
         "std": 0.013670203871166652
+=======
+        "mean": 8.760405640150001,
+        "std": 0.01130070654173099
+      },
+      "lightgbm": {
+        "mean": 8.767516710516555,
+        "std": 0.013339021556039835
+      },
+      "xgboost": {
+        "mean": 8.790768560062292,
+        "std": 0.01407104173381529
+>>>>>>> b6f8a9cf10c46063dc35206388bfcef35480dd85
       }
     },
     "is_optimized": true,

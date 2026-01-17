@@ -118,10 +118,18 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                     ('sleep_quality', 'exam_difficulty'),
                 ],
                 'separator': '_'
+            },
+            'create_statistical_features': {
+                'flag' : True,
+                'feature_groups': [
+                    ['study_hours', 'class_attendance', 'sleep_hours'],
+                    ['age', 'study_hours', 'class_attendance'],
+                ],
+                'statistics': ['mean'],
+
             }
         }
         
-        # ========== Feature Engineering 1단계: 인코딩 전 ==========
         print("  📌 1단계: 인코딩 전 Feature Engineering")
         
         # 이상치 클리핑
@@ -147,6 +155,49 @@ def prepare_data(df_train, df_test, target_col='exam_score',
             X_train = create_interaction_features(X_train, feature_pairs, operations)
             X_test = create_interaction_features(X_test, feature_pairs, operations)
 
+       # course별 study_hours 평균 차이
+        X_train['course_study_hours_mean'] = X_train.groupby('course')['study_hours'].transform('mean')
+        X_test['course_study_hours_mean'] = X_test.groupby('course')['study_hours'].transform('mean')
+
+        X_train['study_hours_subtract_course_study_hours_mean'] = X_train['study_hours'] - X_train['course_study_hours_mean']
+        X_test['study_hours_subtract_course_study_hours_mean'] = X_test['study_hours'] - X_test['course_study_hours_mean']
+
+        # course별 class_attendance 평균 차이
+        X_train['course_class_attendance_mean'] = X_train.groupby('course')['class_attendance'].transform('mean')
+        X_test['course_class_attendance_mean'] = X_test.groupby('course')['class_attendance'].transform('mean')
+
+        X_train['class_attendance_subtract_course_class_attendance_mean'] = X_train['class_attendance'] - X_train['course_class_attendance_mean']
+        X_test['class_attendance_subtract_course_class_attendance_mean'] = X_test['class_attendance'] - X_test['course_class_attendance_mean']
+
+        # course별 sleep_hours 평균 차이
+        X_train['course_sleep_hours_mean'] = X_train.groupby('course')['sleep_hours'].transform('mean')
+        X_test['course_sleep_hours_mean'] = X_test.groupby('course')['sleep_hours'].transform('mean')
+
+        X_train['sleep_hours_subtract_course_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['course_sleep_hours_mean']
+        X_test['sleep_hours_subtract_course_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['course_sleep_hours_mean']
+
+        # study_method별 study_hours 평균 차이
+        X_train['study_method_study_hours_mean'] = X_train.groupby('study_method')['study_hours'].transform('mean')
+        X_test['study_method_study_hours_mean'] = X_test.groupby('study_method')['study_hours'].transform('mean')
+
+        X_train['study_hours_subtract_study_method_study_hours_mean'] = X_train['study_hours'] - X_train['study_method_study_hours_mean']
+        X_test['study_hours_subtract_study_method_study_hours_mean'] = X_test['study_hours'] - X_test['study_method_study_hours_mean']
+
+        # study_method별 class_attendance 평균 차이
+        X_train['study_method_class_attendance_mean'] = X_train.groupby('study_method')['class_attendance'].transform('mean')
+        X_test['study_method_class_attendance_mean'] = X_test.groupby('study_method')['class_attendance'].transform('mean')
+
+        X_train['class_attendance_subtract_study_method_class_attendance_mean'] = X_train['class_attendance'] - X_train['study_method_class_attendance_mean']
+        X_test['class_attendance_subtract_study_method_class_attendance_mean'] = X_test['class_attendance'] - X_test['study_method_class_attendance_mean']
+
+        # study_method별 sleep_hours 평균 차이
+        X_train['study_method_sleep_hours_mean'] = X_train.groupby('study_method')['sleep_hours'].transform('mean')
+        X_test['study_method_sleep_hours_mean'] = X_test.groupby('study_method')['sleep_hours'].transform('mean')
+
+        X_train['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['study_method_sleep_hours_mean']
+        X_test['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['study_method_sleep_hours_mean']
+
+        
         # 업데이트된 컬럼 리스트
         numeric_cols = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
         categorical_cols = X_train.select_dtypes(include=['object', 'category']).columns.tolist()

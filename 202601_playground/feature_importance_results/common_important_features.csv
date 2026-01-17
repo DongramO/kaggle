@@ -1,4 +1,5 @@
 ﻿Feature,Average_Importance
+<<<<<<< HEAD
 class_attendance_x_study_hours_FE,0.36494126869412796
 study_hours,0.1789425071227475
 study_hours_x_sleep_quality_encoded_FE,0.07146441314374537
@@ -10,3 +11,24 @@ sleep_hours,0.013811208109010431
 class_attendance_study_hours_ratio,0.012768283362727251
 study_hours_x_exam_difficulty_encoded_FE,0.003044862406729293
 age,0.002213597834537914
+=======
+class_attendance_x_study_hours_FE,0.529865086247243
+study_hours,0.0852170692225323
+study_hours_x_sleep_quality_encoded_FE,0.055117956489011743
+study_hours_x_facility_rating_encoded_FE,0.04654002557154541
+class_attendance_x_sleep_quality_encoded_FE,0.04581929486063046
+study_method_study_hours_mean,0.033238801599310634
+study_hours_add_sleep_hours_FE,0.027904599982348312
+class_attendance,0.020735651306174566
+study_method_sleep_hours_mean,0.012605715033095157
+class_attendance_subtract_course_class_attendance_mean,0.012028833147957057
+class_attendance_subtract_study_method_class_attendance_mean,0.011870664332823523
+study_hours_subtract_course_study_hours_mean,0.011770801171183107
+study_method_class_attendance_mean,0.007116603897847704
+sleep_hours_subtract_study_method_sleep_hours_mean,0.006822220390828345
+sleep_hours_subtract_course_sleep_hours_mean,0.00586824810389502
+sleep_hours,0.005684539139207331
+study_hours_subtract_study_method_study_hours_mean,0.0034071344476139845
+class_attendance_study_hours_ratio,0.003154475510292914
+study_hours_x_exam_difficulty_encoded_FE,0.002720772816468347
+>>>>>>> b6f8a9cf10c46063dc35206388bfcef35480dd85
