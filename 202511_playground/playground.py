@@ -438,7 +438,7 @@ def encoding_data(df_train, target_col, model_type, X, y,X_train, X_val, y_train
             transformers=[
                 ('num', num_transformer, df_num_cols),
                 ('cat', xgb_cat_transformer, xgb_cat_cols),
-                ('catboost', xgb_cb_encoder, xgb_cb_cols),
+                ('gi', xgb_cb_encoder, xgb_cb_cols),
             ],
             remainder='drop'  
         )

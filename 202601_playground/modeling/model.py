@@ -140,11 +140,19 @@ class CatBoostModel(BaseModel):
         else:
             cat_indices = self.cat_features if self.cat_features else None
         
+        # early_stopping_rounds는 fit() 메서드의 파라미터이므로 params에서 분리
+        fit_params = self.params.copy()
+        early_stopping_rounds = fit_params.pop('early_stopping_rounds', None)
+        
         # 모델 생성
         if self.task_type == 'regression':
-            self.model = CatBoostRegressor(**self.params)
+            self.model = CatBoostRegressor(**fit_params)
         else:
-            self.model = CatBoostClassifier(**self.params)
+            self.model = CatBoostClassifier(**fit_params)
+        
+        # early_stopping_rounds가 있으면 fit()에 전달
+        if early_stopping_rounds is not None:
+            kwargs['early_stopping_rounds'] = early_stopping_rounds
         
         # 학습
         if X_val is not None and y_val is not None:
@@ -214,13 +222,30 @@ class LightGBMModel(BaseModel):
         
     def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
         """LightGBM 모델 학습"""
+        # early_stopping_rounds는 train() 메서드의 파라미터이므로 params에서 분리
+        fit_params = self.params.copy()
+        early_stopping_rounds = fit_params.pop('early_stopping_rounds', None)
+        
+        # early_stopping_rounds가 있고 validation set이 있으면 callback 추가
+        if early_stopping_rounds is not None and X_val is not None and y_val is not None:
+            # callbacks가 없으면 새로 생성, 있으면 기존 것에 추가
+            if 'callbacks' not in kwargs:
+                kwargs['callbacks'] = []
+            # early_stopping callback이 이미 있는지 확인
+            has_early_stopping = any(
+                hasattr(cb, '__class__') and 'early_stopping' in str(cb.__class__).lower()
+                for cb in kwargs['callbacks']
+            )
+            if not has_early_stopping:
+                kwargs['callbacks'].append(lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False))
+        
         # 데이터셋 생성
         train_data = lgb.Dataset(X_train, label=y_train)
         
         if X_val is not None and y_val is not None:
             val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
             self.model = lgb.train(
-                self.params,
+                fit_params,
                 train_data,
                 valid_sets=[train_data, val_data],
                 valid_names=['train', 'val'],
@@ -228,7 +253,7 @@ class LightGBMModel(BaseModel):
             )
         else:
             self.model = lgb.train(
-                self.params,
+                fit_params,
                 train_data,
                 **kwargs
             )
@@ -290,6 +315,14 @@ class XGBoostModel(BaseModel):
         
     def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
         """XGBoost 모델 학습"""
+        # early_stopping_rounds는 train() 메서드의 파라미터이므로 params에서 분리
+        fit_params = self.params.copy()
+        early_stopping_rounds = fit_params.pop('early_stopping_rounds', None)
+        
+        # early_stopping_rounds가 있으면 kwargs에 추가
+        if early_stopping_rounds is not None:
+            kwargs['early_stopping_rounds'] = early_stopping_rounds
+        
         # 데이터셋 생성
         train_data = xgb.DMatrix(X_train, label=y_train)
         
@@ -299,14 +332,14 @@ class XGBoostModel(BaseModel):
                 val_data = xgb.DMatrix(X_val, label=y_val)
                 watchlist = [(train_data, 'train'), (val_data, 'val')]
                 self.model = xgb.train(
-                    self.params,
+                    fit_params,
                     train_data,
                     evals=watchlist,
                     **kwargs
                 )
             else:
                 self.model = xgb.train(
-                    self.params,
+                    fit_params,
                     train_data,
                     **kwargs
                 )
@@ -315,7 +348,7 @@ class XGBoostModel(BaseModel):
             # GPU 관련 오류인 경우 CPU로 전환
             if 'gpu' in error_msg or 'gpu_hist' in error_msg or 'cuda' in error_msg:
                 # CPU 파라미터로 변경
-                cpu_params = self.params.copy()
+                cpu_params = fit_params.copy()
                 cpu_params['tree_method'] = 'hist'
                 if 'device' in cpu_params:
                     del cpu_params['device']

@@ -9,7 +9,10 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from sklearn.metrics import mean_squared_error, roc_auc_score
 from preprocess.encoder import fit_encoder, transform_with_encoder, one_hot_encode, ordinal_encode
-from preprocess.feature_engineering import clip_outliers, create_interaction_features, create_ratio_features, create_categorical_interactions
+from preprocess.feature_engineering import (
+    clip_outliers, create_interaction_features, create_ratio_features, 
+    create_categorical_interactions, create_categorical_encoded_interaction
+)
 from eda import analyze_feature_importance, analyze_permutation_importance, analyze_high_error_samples
 from eda.dataload import load_data
 from modeling.model import ModelTrainer, EnsembleModel, evaluate_model
@@ -126,7 +129,6 @@ def prepare_data(df_train, df_test, target_col='exam_score',
                     ['age', 'study_hours', 'class_attendance'],
                 ],
                 'statistics': ['mean'],
-
             }
         }
         
@@ -139,13 +141,6 @@ def prepare_data(df_train, df_test, target_col='exam_score',
             X_train = clip_outliers(X_train, numeric_cols, clip_rules)
             X_test = clip_outliers(X_test, numeric_cols, clip_rules)
         
-        # 범주형 조합 특성 생성 (인코딩 전에만 가능)
-        # cat_interaction_cfg = config.get('create_categorical_interactions', {})
-        # if cat_interaction_cfg.get('flag', False):
-        #     categorical_pairs = cat_interaction_cfg.get('categorical_pairs', [])
-        #     separator = cat_interaction_cfg.get('separator', '_')
-        #     X_train = create_categorical_interactions(X_train, categorical_pairs, separator)
-        #     X_test = create_categorical_interactions(X_test, categorical_pairs, separator)
         
         # 인코딩 전 수치형 조합 (인코딩된 컬럼을 사용하지 않는 것들)
         interaction_before_cfg = config.get('create_interactions_before_encoding', {})
@@ -155,47 +150,47 @@ def prepare_data(df_train, df_test, target_col='exam_score',
             X_train = create_interaction_features(X_train, feature_pairs, operations)
             X_test = create_interaction_features(X_test, feature_pairs, operations)
 
-       # course별 study_hours 평균 차이
-        X_train['course_study_hours_mean'] = X_train.groupby('course')['study_hours'].transform('mean')
-        X_test['course_study_hours_mean'] = X_test.groupby('course')['study_hours'].transform('mean')
+        # course별 study_hours 평균 차이
+        # X_train['course_study_hours_mean'] = X_train.groupby('course')['study_hours'].transform('mean')
+        # X_test['course_study_hours_mean'] = X_test.groupby('course')['study_hours'].transform('mean')
 
-        X_train['study_hours_subtract_course_study_hours_mean'] = X_train['study_hours'] - X_train['course_study_hours_mean']
-        X_test['study_hours_subtract_course_study_hours_mean'] = X_test['study_hours'] - X_test['course_study_hours_mean']
+        # X_train['study_hours_subtract_course_study_hours_mean'] = X_train['study_hours'] - X_train['course_study_hours_mean']
+        # X_test['study_hours_subtract_course_study_hours_mean'] = X_test['study_hours'] - X_test['course_study_hours_mean']
 
         # course별 class_attendance 평균 차이
-        X_train['course_class_attendance_mean'] = X_train.groupby('course')['class_attendance'].transform('mean')
-        X_test['course_class_attendance_mean'] = X_test.groupby('course')['class_attendance'].transform('mean')
+        # X_train['course_class_attendance_mean'] = X_train.groupby('course')['class_attendance'].transform('mean')
+        # X_test['course_class_attendance_mean'] = X_test.groupby('course')['class_attendance'].transform('mean')
 
-        X_train['class_attendance_subtract_course_class_attendance_mean'] = X_train['class_attendance'] - X_train['course_class_attendance_mean']
-        X_test['class_attendance_subtract_course_class_attendance_mean'] = X_test['class_attendance'] - X_test['course_class_attendance_mean']
+        # X_train['class_attendance_subtract_course_class_attendance_mean'] = X_train['class_attendance'] - X_train['course_class_attendance_mean']
+        # X_test['class_attendance_subtract_course_class_attendance_mean'] = X_test['class_attendance'] - X_test['course_class_attendance_mean']
 
         # course별 sleep_hours 평균 차이
-        X_train['course_sleep_hours_mean'] = X_train.groupby('course')['sleep_hours'].transform('mean')
-        X_test['course_sleep_hours_mean'] = X_test.groupby('course')['sleep_hours'].transform('mean')
+        # X_train['course_sleep_hours_mean'] = X_train.groupby('course')['sleep_hours'].transform('mean')
+        # X_test['course_sleep_hours_mean'] = X_test.groupby('course')['sleep_hours'].transform('mean')
 
-        X_train['sleep_hours_subtract_course_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['course_sleep_hours_mean']
-        X_test['sleep_hours_subtract_course_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['course_sleep_hours_mean']
+        # X_train['sleep_hours_subtract_course_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['course_sleep_hours_mean']
+        # X_test['sleep_hours_subtract_course_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['course_sleep_hours_mean']
 
-        # study_method별 study_hours 평균 차이
-        X_train['study_method_study_hours_mean'] = X_train.groupby('study_method')['study_hours'].transform('mean')
-        X_test['study_method_study_hours_mean'] = X_test.groupby('study_method')['study_hours'].transform('mean')
+        # # study_method별 study_hours 평균 차이
+        # X_train['study_method_study_hours_mean'] = X_train.groupby('study_method')['study_hours'].transform('mean')
+        # X_test['study_method_study_hours_mean'] = X_test.groupby('study_method')['study_hours'].transform('mean')
 
-        X_train['study_hours_subtract_study_method_study_hours_mean'] = X_train['study_hours'] - X_train['study_method_study_hours_mean']
-        X_test['study_hours_subtract_study_method_study_hours_mean'] = X_test['study_hours'] - X_test['study_method_study_hours_mean']
+        # X_train['study_hours_subtract_study_method_study_hours_mean'] = X_train['study_hours'] - X_train['study_method_study_hours_mean']
+        # X_test['study_hours_subtract_study_method_study_hours_mean'] = X_test['study_hours'] - X_test['study_method_study_hours_mean']
 
-        # study_method별 class_attendance 평균 차이
-        X_train['study_method_class_attendance_mean'] = X_train.groupby('study_method')['class_attendance'].transform('mean')
-        X_test['study_method_class_attendance_mean'] = X_test.groupby('study_method')['class_attendance'].transform('mean')
+        # # study_method별 class_attendance 평균 차이
+        # X_train['study_method_class_attendance_mean'] = X_train.groupby('study_method')['class_attendance'].transform('mean')
+        # X_test['study_method_class_attendance_mean'] = X_test.groupby('study_method')['class_attendance'].transform('mean')
 
-        X_train['class_attendance_subtract_study_method_class_attendance_mean'] = X_train['class_attendance'] - X_train['study_method_class_attendance_mean']
-        X_test['class_attendance_subtract_study_method_class_attendance_mean'] = X_test['class_attendance'] - X_test['study_method_class_attendance_mean']
+        # X_train['class_attendance_subtract_study_method_class_attendance_mean'] = X_train['class_attendance'] - X_train['study_method_class_attendance_mean']
+        # X_test['class_attendance_subtract_study_method_class_attendance_mean'] = X_test['class_attendance'] - X_test['study_method_class_attendance_mean']
 
-        # study_method별 sleep_hours 평균 차이
-        X_train['study_method_sleep_hours_mean'] = X_train.groupby('study_method')['sleep_hours'].transform('mean')
-        X_test['study_method_sleep_hours_mean'] = X_test.groupby('study_method')['sleep_hours'].transform('mean')
+        # # study_method별 sleep_hours 평균 차이
+        # X_train['study_method_sleep_hours_mean'] = X_train.groupby('study_method')['sleep_hours'].transform('mean')
+        # X_test['study_method_sleep_hours_mean'] = X_test.groupby('study_method')['sleep_hours'].transform('mean')
 
-        X_train['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['study_method_sleep_hours_mean']
-        X_test['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['study_method_sleep_hours_mean']
+        # X_train['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_train['sleep_hours'] - X_train['study_method_sleep_hours_mean']
+        # X_test['sleep_hours_subtract_study_method_sleep_hours_mean'] = X_test['sleep_hours'] - X_test['study_method_sleep_hours_mean']
 
         
         # 업데이트된 컬럼 리스트
@@ -324,7 +319,29 @@ def prepare_data(df_train, df_test, target_col='exam_score',
        
             X_train = create_ratio_features(X_train, numerator_cols, denominator_cols, feature_names)
             X_test = create_ratio_features(X_test, numerator_cols, denominator_cols, feature_names)
-          
+        
+        # 범주형 one-hot 인코딩 컬럼과 수치형 컬럼 상호작용 특성 생성 예시
+        # study_method와 study_hours 상호작용
+        X_train = create_categorical_encoded_interaction( X_train, 'study_method', 'study_hours', encoded_cols_tag)
+        X_test = create_categorical_encoded_interaction( X_test, 'study_method', 'study_hours', encoded_cols_tag)
+        
+        # course와 study_hours 상호작용
+        X_train = create_categorical_encoded_interaction( X_train, 'course', 'study_hours', encoded_cols_tag)
+        X_test = create_categorical_encoded_interaction( X_test, 'course', 'study_hours', encoded_cols_tag)
+        
+        # one-hot 인코딩으로 생성된 원본 컬럼 삭제 (상호작용 특성은 유지)
+        # 상호작용 특성 이름 패턴: '{categorical_col}_encoded_x_{numeric_col}_FE'
+        # 원본 one-hot 인코딩 컬럼: '{categorical_col}_{value}_encoded'
+        # all_encoded_cols = [col for col in X_train.columns if col.endswith(encoded_cols_tag)]
+        # interaction_feature_cols = [col for col in X_train.columns if '_encoded_x_' in col and col.endswith('_FE')]
+        
+        # # 상호작용 특성에 사용되지 않은 원본 one-hot 인코딩 컬럼만 삭제
+        # cols_to_drop = [col for col in all_encoded_cols if col not in interaction_feature_cols]
+        
+        # if len(cols_to_drop) > 0:
+        #     X_train = X_train.drop(columns=cols_to_drop)
+        #     X_test = X_test.drop(columns=[col for col in cols_to_drop if col in X_test.columns])
+        #     print(f"  🗑️  원본 one-hot 인코딩 컬럼 {len(cols_to_drop)}개 삭제 (상호작용 특성은 유지)")
         
         # 최종 컬럼 리스트 업데이트
         numeric_cols = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
@@ -425,6 +442,73 @@ def train_models(X_train, y_train, X_test, categorical_cols, task_type='regressi
             model_configs['xgboost'] = xgb_params
         
         trainer.best_params = best_params
+    else:
+        # 기본 파라미터 사용
+        model_configs = {}
+        
+        # GPU 디바이스 확인을 위한 import
+        from modeling.model import get_gpu_device
+        
+        # CatBoost 기본 파라미터
+        cb_params = {
+            'iterations': 1000,
+            'learning_rate': 0.1,
+            'depth': 6,
+            'random_state': random_state,
+            'verbose': False,
+            'allow_writing_files': False,
+            # 추가 파라미터
+            'subsample': 0.8,
+            'colsample_bylevel': 0.8,
+            'min_data_in_leaf': 20,
+            'early_stopping_rounds': 100,
+        }
+        if use_gpu:
+            gpu_device = get_gpu_device()
+            if gpu_device is not None:
+                cb_params['task_type'] = 'GPU'
+                cb_params['devices'] = gpu_device
+        if task_type == 'regression':
+            cb_params['loss_function'] = 'RMSE'
+            cb_params['eval_metric'] = 'RMSE'
+        else:
+            cb_params['loss_function'] = 'Logloss'
+            cb_params['eval_metric'] = 'Logloss'
+        model_configs['catboost'] = cb_params
+        
+        # LightGBM 기본 파라미터
+        lgb_params = {
+            'n_estimators': 1000,
+            'learning_rate': 0.1,
+            'max_depth': 6,
+            'random_state': random_state,
+            'verbosity': -1,
+            'early_stopping_rounds': 100,
+        }
+        if task_type == 'regression':
+            lgb_params['objective'] = 'regression'
+            lgb_params['metric'] = 'rmse'
+        else:
+            lgb_params['objective'] = 'binary'
+            lgb_params['metric'] = 'binary_logloss'
+        model_configs['lightgbm'] = lgb_params
+        
+        # XGBoost 기본 파라미터
+        xgb_params = {
+            'n_estimators': 1000,
+            'learning_rate': 0.1,
+            'max_depth': 6,
+            'random_state': random_state,
+            'verbosity': 0,
+            'early_stopping_rounds': 100,
+        }
+        if task_type == 'regression':
+            xgb_params['objective'] = 'reg:squarederror'
+            xgb_params['eval_metric'] = 'rmse'
+        else:
+            xgb_params['objective'] = 'binary:logistic'
+            xgb_params['eval_metric'] = 'logloss'
+        model_configs['xgboost'] = xgb_params
     
     # 각 모델 학습
     test_predictions = {}

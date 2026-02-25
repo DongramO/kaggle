@@ -1,6 +1,6 @@
 {
   "task_type": "regression",
-  "timestamp": "2026-01-17 16:57:44",
+  "timestamp": "2026-01-24 17:16:58",
   "hyperparameters": {
     "xgboost": {
       "max_depth": 8,
@@ -35,19 +35,19 @@
   "additional_info": {
     "cv_scores": {
       "catboost": {
-        "mean": 8.760405640150001,
-        "std": 0.01130070654173099
+        "mean": 8.75686422668902,
+        "std": 0.012649919614017287
       },
       "lightgbm": {
-        "mean": 8.767516710516555,
-        "std": 0.013339021556039835
+        "mean": 9.349090655098095,
+        "std": 0.012387176135654291
       },
       "xgboost": {
-        "mean": 8.790768560062292,
-        "std": 0.01407104173381529
+        "mean": 9.363567008137453,
+        "std": 0.01397925962121735
       }
     },
-    "is_optimized": true,
-    "note": "Optuna 최적화된 파라미터"
+    "is_optimized": false,
+    "note": "기본 파라미터"
   }
 }

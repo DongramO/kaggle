@@ -256,6 +256,99 @@ def create_statistical_features(
     return df
 
 
+def create_categorical_encoded_interaction(
+    df: pd.DataFrame,
+    categorical_col: str,
+    numeric_col: str,
+    encoded_cols_tag: str = '_encoded',
+    feature_name: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    범주형 one-hot 인코딩 컬럼과 수치형 컬럼의 상호작용 특성 생성
+    
+    각 row의 원본 범주형 값에 해당하는 one-hot 인코딩 컬럼을 찾아서
+    그 값(0 또는 1)에 수치형 컬럼 값을 곱한 신규 특성을 생성합니다.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        입력 데이터프레임
+    categorical_col : str
+        원본 범주형 컬럼 이름 (예: 'study_method', 'course')
+    numeric_col : str
+        곱할 수치형 컬럼 이름 (예: 'study_hours', 'class_attendance')
+    encoded_cols_tag : str
+        인코딩된 컬럼 태그 (기본값: '_encoded')
+        예: 'study_method_coaching_encoded'에서 '_encoded' 부분
+    feature_name : str, optional
+        생성될 특성 이름 (기본값: None)
+        None이면 '{categorical_col}_encoded_x_{numeric_col}_FE' 형식으로 자동 생성
+    
+    Returns:
+    --------
+    pd.DataFrame
+        상호작용 특성이 추가된 데이터프레임
+    
+    Examples:
+    --------
+    >>> df = pd.DataFrame({
+    ...     'study_method': ['coaching', 'self-study', 'online videos'],
+    ...     'study_hours': [5, 8, 6],
+    ...     'study_method_coaching_encoded': [1, 0, 0],
+    ...     'study_method_self-study_encoded': [0, 1, 0],
+    ...     'study_method_online videos_encoded': [0, 0, 1]
+    ... })
+    >>> 
+    >>> # study_method와 study_hours 상호작용 특성 생성
+    >>> df = create_categorical_encoded_interaction(
+    ...     df, 'study_method', 'study_hours', '_encoded'
+    ... )
+    >>> # 결과: 각 row의 study_method에 해당하는 encoded 값 * study_hours
+    >>> # Row 1: study_method='coaching' -> study_method_coaching_encoded=1 -> 1 * 5 = 5
+    >>> # Row 2: study_method='self-study' -> study_method_self-study_encoded=1 -> 1 * 8 = 8
+    >>> # Row 3: study_method='online videos' -> study_method_online videos_encoded=1 -> 1 * 6 = 6
+    """
+    df = df.copy()
+    
+    # 컬럼 존재 확인
+    if categorical_col not in df.columns:
+        return df
+    if numeric_col not in df.columns:
+        return df
+    
+    # 해당 범주형 컬럼의 모든 encoded 컬럼 찾기
+    encoded_cols = [col for col in df.columns 
+                  if categorical_col in col and col.endswith(encoded_cols_tag)]
+    
+    if len(encoded_cols) == 0:
+        return df
+    
+    # 매핑 딕셔너리: 범주형 값 -> encoded 컬럼 이름
+    # 예: 'coaching' -> 'study_method_coaching_encoded'
+    value_to_col = {}
+    for col in encoded_cols:
+        # 'study_method_coaching_encoded' -> 'coaching'
+        value = col.replace(f'{categorical_col}_', '').replace(encoded_cols_tag, '')
+        value_to_col[value] = col
+    
+    # 특성 이름 생성
+    if feature_name is None:
+        feature_name = f'{categorical_col}_encoded_x_{numeric_col}_FE'
+    
+    # 벡터화된 연산: 각 범주형 값에 해당하는 encoded 컬럼만 선택하여 곱하기
+    result = pd.Series(0.0, index=df.index, dtype=float)
+    for value, col_name in value_to_col.items():
+        if col_name in df.columns:
+            # 해당 범주형 값을 가진 row들만 선택
+            mask = df[categorical_col] == value
+            # encoded 값(0 또는 1) * 수치형 값
+            result[mask] = df.loc[mask, col_name] * df.loc[mask, numeric_col]
+    
+    df[feature_name] = result
+    
+    return df
+
+
 def create_categorical_interactions(
     df: pd.DataFrame,
     categorical_pairs: List[tuple],

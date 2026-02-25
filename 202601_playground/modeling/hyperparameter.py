@@ -101,6 +101,11 @@ class HyperparameterOptimizer:
                     'random_state': self.random_state,
                     'verbose': False,
                     'allow_writing_files': False,
+                    # 추가 파라미터
+                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                    'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.5, 1.0),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # bagging_temperature는 bootstrap_type='Bayesian'일 때만 사용 가능
                 if bootstrap_type == 'Bayesian':
@@ -125,6 +130,11 @@ class HyperparameterOptimizer:
                     'random_state': self.random_state,
                     'verbose': False,
                     'allow_writing_files': False,
+                    # 추가 파라미터
+                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+                    'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.5, 1.0),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # bagging_temperature는 bootstrap_type='Bayesian'일 때만 사용 가능
                 if bootstrap_type == 'Bayesian':
@@ -217,6 +227,7 @@ class HyperparameterOptimizer:
                     'objective': 'regression',
                     'metric': 'rmse',
                     'boosting_type': 'gbdt',
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
                     'num_leaves': trial.suggest_int('num_leaves', 31, 255),
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
                     'max_depth': trial.suggest_int('max_depth', 3, 12),
@@ -228,6 +239,7 @@ class HyperparameterOptimizer:
                     'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': -1,
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # GPU 설정 추가
                 if self.use_gpu:
@@ -243,6 +255,7 @@ class HyperparameterOptimizer:
                     'objective': 'binary',
                     'metric': 'binary_logloss',
                     'boosting_type': 'gbdt',
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
                     'num_leaves': trial.suggest_int('num_leaves', 31, 255),
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
                     'max_depth': trial.suggest_int('max_depth', 3, 12),
@@ -254,6 +267,7 @@ class HyperparameterOptimizer:
                     'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': -1,
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # GPU 설정 추가
                 if self.use_gpu:
@@ -317,6 +331,7 @@ class HyperparameterOptimizer:
                 params = {
                     'objective': 'reg:squarederror',
                     'eval_metric': 'rmse',
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
                     'max_depth': trial.suggest_int('max_depth', 3, 12),
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
                     'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
@@ -327,6 +342,7 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # GPU 설정 추가 (XGBoost 2.0+에서는 tree_method='hist'와 device 파라미터 사용)
                 if self.use_gpu:
@@ -344,6 +360,7 @@ class HyperparameterOptimizer:
                 params = {
                     'objective': 'binary:logistic',
                     'eval_metric': 'logloss',
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
                     'max_depth': trial.suggest_int('max_depth', 3, 12),
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
                     'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
@@ -354,6 +371,7 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
+                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
                 }
                 # GPU 설정 추가 (XGBoost 2.0+에서는 tree_method='hist'와 device 파라미터 사용)
                 if self.use_gpu:
