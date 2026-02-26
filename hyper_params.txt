@@ -1,0 +1,7 @@
+[xgboost]
+Best trial:
+{'n_estimators': 767, 'learning_rate': 0.04941706054533553, 'max_depth': 5, 'subsample': 0.9032294063778931, 'colsample_bytree': 0.5574373428339369, 'min_child_weight': 10, 'gamma': 0.14827696333170587, 'reg_alpha': 0.0034542264442943855, 'reg_lambda': 0.0017437934010550243}
+
+[lgbm]
+Best trial:
+{'n_estimators': 774, 'learning_rate': 0.047051628921977035, 'num_leaves': 34, 'max_depth': 12, 'subsample': 0.7046955802104758, 'colsample_bytree': 0.854461065661112, 'reg_alpha': 8.876014045236223, 'reg_lambda': 1.41657000413366}

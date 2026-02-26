@@ -1,0 +1,15 @@
+---
+alwaysApply: false
+description: 신규 프로젝트 구조 생성 가이드
+---
+
+# 신규 프로젝트 구조 생성 가이드
+
+## 프로젝트 구조 개요
+
+├── common/                    # 공통 모듈 (재사용 가능)
+│   ├── data/                 # 데이터 로드
+│   ├── preprocess/           # 전처리
+│   ├── modeling/             # 모델링
+│   ├── eda/                  # EDA
+│   └── utils/                # 유틸리티
