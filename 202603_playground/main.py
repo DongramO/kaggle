@@ -208,7 +208,6 @@ def main():
     
     # 데이터 로드
     print("\n📂 데이터 로드 중...")
-    print(project_root)
     df_train, df_test, df_sub = load_data(data_dir=project_root)
     
     # 데이터 준비
@@ -218,18 +217,21 @@ def main():
         use_feature_engineering=True,
         encoding_config=ENCODING_CONFIG
     )
+
+    # 분류 시 타겟이 문자열(Yes/No 등)이면 0/1로 변환 (LightGBM 등 모델·검증 지표 요구)
+    if TASK_TYPE == 'classification' and (pd.api.types.is_string_dtype(y_train) or y_train.dtype == object):
+        if set(y_train.dropna().unique()) <= {'Yes', 'No'}:
+            mapping = {'No': 0, 'Yes': 1}
+        else:
+            unique_vals = sorted(y_train.dropna().unique().tolist())
+            mapping = {v: i for i, v in enumerate(unique_vals)}
+        y_train = y_train.map(mapping).astype(int)
+        print(f"  타겟 인코딩: {mapping}")
     
     print("\n📊 EDA 시작...")
     print("="*60)
-    # Feature engineering된 컬럼 + 타겟을 합쳐 시각화(상관 분석 등에 타겟 포함)
     df_for_vis = X_train.copy()
-    y_vis = y_train.copy()
-    if pd.api.types.is_string_dtype(y_vis) or y_vis.dtype == object:
-        df_for_vis[TARGET_COL] = y_vis.map({'Yes': 1, 'No': 0})
-    else:
-        df_for_vis[TARGET_COL] = y_vis
-    
-    print(df_for_vis[TARGET_COL].head())
+    df_for_vis[TARGET_COL] = y_train
     # run_eda_visualization(df_for_vis, target_col=TARGET_COL)
     
     # 모델 학습
@@ -263,7 +265,7 @@ def main():
     test_predictions = {}
     model_features = {}
     
-    for model_type in ['catboost', 'lightgbm', 'xgboost']:
+    for model_type in ['lightgbm', 'xgboost']:
         print(f"\n{'='*60}")
         print(f"🚀 {model_type.upper()} 모델 학습 시작")
         print(f"{'='*60}")

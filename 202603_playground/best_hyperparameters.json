@@ -1,5 +1,5 @@
 {
-  "task_type": "regression",
+  "task_type": "classification",
   "timestamp": "2026-01-24 17:16:58",
   "hyperparameters": {
     "xgboost": {

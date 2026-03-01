@@ -90,7 +90,7 @@ FEATURE_ENGINEERING_CONFIG = {
 # ========== 모델 학습 설정 ==========
 TASK_TYPE = 'classification'  # 'regression' | 'classification'
 SCORING_METRIC = 'auc'  # 문제별 평가·제출 형식: 회귀=rmse|mae|r2, 분류=auc|logloss|accuracy
-N_FOLDS = 5
+N_FOLDS = 1
 RANDOM_STATE = 42
 USE_GPU = True
 
