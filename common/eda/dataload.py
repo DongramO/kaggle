@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+from typing import List, Optional, Tuple
 
 def get_data_paths():
     """
@@ -80,4 +81,16 @@ def data_classifier(df_train):
     return numeric_cols, categorical_cols, df_exam_score
 
 
+def get_numeric_and_categorical(
+    df: pd.DataFrame,
+    id_col: Optional[str] = None,
+    target_col: Optional[str] = None,
+) -> Tuple[List[str], List[str]]:
+    """ID·타겟 제외 후 수치형/범주형 컬럼 분류. 반환: (numeric_cols, categorical_cols)."""
+    exclude = {c for c in (id_col, target_col) if c is not None and c in df.columns}
+    cols = [c for c in df.columns if c not in exclude]
+    sub = df[cols]
+    numeric = sub.select_dtypes(include=[np.number]).columns.tolist()
+    categorical = sub.select_dtypes(include=['object', 'category']).columns.tolist()
+    return numeric, categorical
 

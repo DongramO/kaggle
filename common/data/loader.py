@@ -35,7 +35,7 @@ def load_data(
     # 경로 결정 및 절대경로 변환
     if data_dir:
         # data_dir이 지정된 경우
-        data_dir = os.path.abspath(data_dir)
+        data_dir = os.path.abspath(data_dir+'/data')
         train_path = os.path.join(data_dir, 'train.csv')
         test_path = os.path.join(data_dir, 'test.csv')
         sub_path = os.path.join(data_dir, 'sample_submission.csv')

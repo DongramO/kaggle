@@ -4,9 +4,26 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import seaborn as sns
 from typing import List, Optional, Dict, Tuple, Union
 from dataclasses import dataclass
+
+
+def _set_korean_font() -> None:
+    """한글이 깨지지 않도록 폰트 설정 (heatmap/plot 제목·축 라벨용)."""
+    plt.rcParams['axes.unicode_minus'] = False
+    korean_candidates = ['Malgun Gothic', 'AppleGothic', 'Apple SD Gothic Neo', 'NanumGothic', 'NanumBarunGothic']
+    available = {f.name for f in fm.fontManager.ttflist}
+    for name in korean_candidates:
+        if name in available:
+            plt.rcParams['font.family'] = name
+            return
+    for name in korean_candidates:
+        for av in available:
+            if name.lower() in av.lower():
+                plt.rcParams['font.family'] = av
+                return
 
 
 @dataclass
@@ -70,13 +87,12 @@ def plot_correlation_heatmap(
     """
     if config is None:
         config = CorrelationConfig()
-    
+    _set_korean_font()
+
     fig, ax = plt.subplots(figsize=config.figsize)
-    
     mask = None
     if config.threshold is not None and config.threshold > 0:
         mask = np.abs(corr_matrix) < config.threshold
-    
     sns.heatmap(
         corr_matrix,
         annot=True,
@@ -167,10 +183,10 @@ def plot_correlation_with_target(
     """
     if config is None:
         config = CorrelationConfig()
-    
+    _set_korean_font()
+
     numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
     correlations = []
-    
     for col in numeric_cols:
         corr = X[col].corr(y)
         correlations.append({

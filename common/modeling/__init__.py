@@ -1,7 +1,7 @@
 """
 Modeling 패키지
+공통 모듈만 제공. 각 playground의 main에서 ModelTrainer, optimize_hyperparameters 등 조합하여 사용.
 """
-from .train import main
 from .model import ModelTrainer, EnsembleModel, evaluate_model
 from .hyperparameter import (
     HyperparameterOptimizer,
@@ -11,7 +11,6 @@ from .hyperparameter import (
 )
 
 __all__ = [
-    'main',
     'ModelTrainer',
     'EnsembleModel',
     'evaluate_model',

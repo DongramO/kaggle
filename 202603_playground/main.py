@@ -11,11 +11,10 @@ sys.path.append(os.path.join(project_root, '..'))
 
 # 프로젝트별 설정 불러오기
 from config import (
-    TARGET_COL, ID_COL, ENCODING_CONFIG, FEATURE_ENGINEERING_CONFIG,
-    TASK_TYPE, N_FOLDS, RANDOM_STATE, USE_GPU,
-    USE_OPTUNA, N_TRIALS, OPTUNA_SAMPLE_SIZE, USE_SAVED_PARAMS,
-    USE_PERMUTATION_IMPORTANCE,
-    PARAMS_FILEPATH, SUBMISSION_FILEPATH, SUMMARY_FILEPATH
+    ID_COL, TARGET_COL, ENCODING_CONFIG, FEATURE_ENGINEERING_CONFIG,
+    TASK_TYPE, SCORING_METRIC, N_FOLDS, RANDOM_STATE, USE_GPU,
+    USE_OPTUNA, USE_SAVED_PARAMS, N_TRIALS, PARAMS_FILEPATH, OPTUNA_SAMPLE_SIZE,
+    SUBMISSION_FILEPATH,
 )
 
 # 공통 모듈 import
@@ -30,13 +29,13 @@ from common.modeling.model import EnsembleModel
 from common.modeling.hyperparameter import optimize_hyperparameters, save_hyperparameters
 from common.eda.feature_importance import analyze_feature_importance
 from common.eda.error_analysis import analyze_high_error_samples
-
+from visualization import run_eda_visualization
 import pandas as pd
 import numpy as np
 from datetime import datetime
 
 
-def prepare_data(df_train, df_test, target_col=TARGET_COL, 
+def prepare_data(df_train, df_test, target_col='churn', 
                  use_feature_engineering=True, encoding_config=None):
     """
     데이터 전처리 함수
@@ -64,6 +63,7 @@ def prepare_data(df_train, df_test, target_col=TARGET_COL,
     print(f"\n📊 데이터 정보:")
     print(f"  학습 데이터 크기: {X_train.shape}")
     print(f"  테스트 데이터 크기: {X_test.shape}")
+    print(f"  데이터 정보: {X_train.info()}")
     print(f"  수치형 컬럼: {len(numeric_cols)}개")
     print(f"  범주형 컬럼: {len(categorical_cols)}개")
     
@@ -71,7 +71,7 @@ def prepare_data(df_train, df_test, target_col=TARGET_COL,
     if use_feature_engineering:
         print("\n🔧 Feature Engineering 적용 중...")
         config = FEATURE_ENGINEERING_CONFIG
-        
+
         # 1단계: 인코딩 전 Feature Engineering
         print("  📌 1단계: 인코딩 전 Feature Engineering")
         
@@ -208,7 +208,8 @@ def main():
     
     # 데이터 로드
     print("\n📂 데이터 로드 중...")
-    df_train, df_test, df_sub = load_data(project_root=project_root)
+    print(project_root)
+    df_train, df_test, df_sub = load_data(data_dir=project_root)
     
     # 데이터 준비
     X_train, y_train, X_test, categorical_cols, numeric_cols, encoded_cols_tag = prepare_data(
@@ -218,9 +219,22 @@ def main():
         encoding_config=ENCODING_CONFIG
     )
     
+    print("\n📊 EDA 시작...")
+    print("="*60)
+    # Feature engineering된 컬럼 + 타겟을 합쳐 시각화(상관 분석 등에 타겟 포함)
+    df_for_vis = X_train.copy()
+    y_vis = y_train.copy()
+    if pd.api.types.is_string_dtype(y_vis) or y_vis.dtype == object:
+        df_for_vis[TARGET_COL] = y_vis.map({'Yes': 1, 'No': 0})
+    else:
+        df_for_vis[TARGET_COL] = y_vis
+    
+    print(df_for_vis[TARGET_COL].head())
+    # run_eda_visualization(df_for_vis, target_col=TARGET_COL)
+    
     # 모델 학습
     print("\n🚀 모델 학습 시작...")
-    trainer = ModelTrainer(task_type=TASK_TYPE, random_state=RANDOM_STATE, use_gpu=USE_GPU)
+    trainer = ModelTrainer(task_type=TASK_TYPE, scoring_metric=SCORING_METRIC, random_state=RANDOM_STATE, use_gpu=USE_GPU)
     
     # 하이퍼파라미터 최적화 또는 저장된 파라미터 사용
     if USE_OPTUNA or USE_SAVED_PARAMS:
@@ -233,7 +247,14 @@ def main():
             params_filepath=PARAMS_FILEPATH,
             encoded_cols_tag=encoded_cols_tag,
             use_gpu=USE_GPU,
-            sample_size=OPTUNA_SAMPLE_SIZE
+            sample_size=OPTUNA_SAMPLE_SIZE,
+            additional_save_info={
+                'n_folds': N_FOLDS,
+                'use_gpu': USE_GPU,
+                'target_col': TARGET_COL,
+                'params_filepath': PARAMS_FILEPATH,
+                'optuna_sample_size': OPTUNA_SAMPLE_SIZE,
+            }
         )
     else:
         best_params = {}
@@ -290,7 +311,7 @@ def main():
     print("🎯 앙상블 모델 생성")
     print(f"{'='*60}")
     
-    ensemble = EnsembleModel(task_type=TASK_TYPE)
+    ensemble = EnsembleModel(task_type=TASK_TYPE, scoring_metric=SCORING_METRIC)
     ensemble.fit(
         trainer.oof_predictions,
         y_train.values if isinstance(y_train, pd.Series) else y_train,

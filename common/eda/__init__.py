@@ -3,6 +3,7 @@ EDA (Exploratory Data Analysis) 모듈
 """
 from .feature_importance import analyze_feature_importance, analyze_permutation_importance
 from .error_analysis import analyze_high_error_samples, find_high_error_samples
+from .dataload import get_numeric_and_categorical
 from .correlation import (
     calculate_correlation_matrix,
     plot_correlation_heatmap,
@@ -15,6 +16,7 @@ from .correlation import (
 )
 
 __all__ = [
+    'get_numeric_and_categorical',
     'analyze_feature_importance',
     'analyze_permutation_importance',
     'analyze_high_error_samples',

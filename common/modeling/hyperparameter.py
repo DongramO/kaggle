@@ -400,9 +400,9 @@ class HyperparameterOptimizer:
 
 
 def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regression',
-                              n_trials=50, random_state=42, use_saved_params=False, 
+                              n_trials=50, random_state=42, use_saved_params=False,
                               params_filepath=None, encoded_cols_tag='_encoded', use_gpu=False,
-                              sample_size=None):
+                              sample_size=None, additional_save_info=None):
     """
     하이퍼파라미터 최적화 또는 저장된 파라미터 로드
     
@@ -430,7 +430,9 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
         GPU 사용 여부 (기본값: False)
     sample_size : int, optional
         샘플 크기 (속도 개선용)
-        
+    additional_save_info : dict, optional
+        JSON에 함께 저장할 상수 (n_folds, use_gpu 등). 저장 경로·재현용.
+
     Returns:
     --------
     dict: 모델별 최적화된 하이퍼파라미터
@@ -536,18 +538,22 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
             print(f"  {key:25s}: {value}")
         print()  # 빈 줄 추가
     
-    # 최적화된 파라미터 저장
+    # 최적화된 파라미터 저장 (경로 + config 상수 함께 저장)
     if params_filepath:
-        print(f"\n💾 Optuna 최적화된 하이퍼파라미터 저장 중...")
+        abs_path = os.path.abspath(params_filepath)
+        print(f"\n💾 Optuna 최적화된 하이퍼파라미터 저장 중: {abs_path}")
+        base_info = {
+            'n_trials': n_trials,
+            'random_state': random_state,
+            'optimization_method': 'Optuna',
+        }
+        if additional_save_info:
+            base_info.update(additional_save_info)
         save_hyperparameters(
             best_params,
             params_filepath,
             task_type=task_type,
-            additional_info={
-                'n_trials': n_trials,
-                'random_state': random_state,
-                'optimization_method': 'Optuna'
-            }
+            additional_info=base_info
         )
     
     return best_params

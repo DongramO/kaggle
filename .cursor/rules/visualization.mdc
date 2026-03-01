@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+## EDA를 위한 시각화 규칙 선언
+- 시각화 함수는 common/visualization.py의 내용을 바탕으로 참조해서 사용해야해
+- visualization 파일의 위치는 매달 playground 디렉토리 내에 생성해줘
+- 기본으로 시각화를 진행할 그래프의 종류는 boxplot, histogram, 상관계수 분석에 대해 시각화 해줘
+- 시각화를 위한 각 함수에 필요한 parameter는 내가 지정할 계획이야.
+- 함수를 통해 주입되는 파라메터들이 함수에 따라 모두 동일하게 동작할 수 있도록 해줘
+- run_eda_visualization 함수는 main.py에서 기본으로 호출할 수 있도록 추가 해줘
+- 시각화를 하는 과정에서 한글에 대한 인코딩이 깨지지 않도록 반드시 확인해줘

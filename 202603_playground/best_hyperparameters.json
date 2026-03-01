@@ -1,0 +1,53 @@
+{
+  "task_type": "regression",
+  "timestamp": "2026-01-24 17:16:58",
+  "hyperparameters": {
+    "xgboost": {
+      "max_depth": 8,
+      "learning_rate": 0.0861091630490229,
+      "min_child_weight": 3,
+      "subsample": 0.9363276311531847,
+      "colsample_bytree": 0.8475821878546004,
+      "gamma": 0.31746028501768164,
+      "reg_alpha": 0.9683416403731477,
+      "reg_lambda": 0.0021407420339273646
+    },
+    "catboost": {
+      "bootstrap_type": "Bernoulli",
+      "iterations": 1854,
+      "learning_rate": 0.09945293924672832,
+      "depth": 6,
+      "l2_leaf_reg": 1.7125849259782566,
+      "random_strength": 0.2856364142892501
+    },
+    "lightgbm": {
+      "num_leaves": 173,
+      "learning_rate": 0.10784298988937857,
+      "max_depth": 9,
+      "min_data_in_leaf": 83,
+      "feature_fraction": 0.5502548853380904,
+      "bagging_fraction": 0.8808609028366424,
+      "bagging_freq": 6,
+      "lambda_l1": 0.21876623320861574,
+      "lambda_l2": 0.0018809260719941468
+    }
+  },
+  "additional_info": {
+    "cv_scores": {
+      "catboost": {
+        "mean": 8.75686422668902,
+        "std": 0.012649919614017287
+      },
+      "lightgbm": {
+        "mean": 9.349090655098095,
+        "std": 0.012387176135654291
+      },
+      "xgboost": {
+        "mean": 9.363567008137453,
+        "std": 0.01397925962121735
+      }
+    },
+    "is_optimized": false,
+    "note": "기본 파라미터"
+  }
+}

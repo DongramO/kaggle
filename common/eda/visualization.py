@@ -5,31 +5,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List, Optional, Dict, Tuple, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class PlotConfig:
-    """플롯 설정 클래스"""
+    """플롯 공통 설정. 함수별 옵션(이상치 표시 등)은 각 함수 인자로."""
     figsize: Tuple[int, int] = (15, 8)
     title: str = ""
-    show_stats: bool = False
-    show_outliers: bool = True
-    max_outliers: int = 10
     grid: bool = True
-    style: str = "default"
-    
+
     def to_dict(self) -> dict:
-        """딕셔너리로 변환"""
-        return {
-            'figsize': self.figsize,
-            'title': self.title,
-            'show_stats': self.show_stats,
-            'show_outliers': self.show_outliers,
-            'max_outliers': self.max_outliers,
-            'grid': self.grid,
-            'style': self.style
-        }
+        return {'figsize': self.figsize, 'title': self.title, 'grid': self.grid}
 
 
 def _get_decimals(value_range: float) -> int:
@@ -54,10 +41,12 @@ def _calculate_iqr_stats(data: pd.Series) -> Dict:
     upper_bound = q3 + 1.5 * iqr
     outliers = data[(data < lower_bound) | (data > upper_bound)]
     
+    mean_val = data.mean() if len(data) > 0 else np.nan
     return {
         'q1': q1,
         'q3': q3,
         'median': median,
+        'mean': mean_val,
         'iqr': iqr,
         'lower_bound': lower_bound,
         'upper_bound': upper_bound,
@@ -67,24 +56,11 @@ def _calculate_iqr_stats(data: pd.Series) -> Dict:
     }
 
 
-def plot_boxplot(df: pd.DataFrame, columns: List[str], 
-                 config: Optional[PlotConfig] = None) -> Tuple[plt.Figure, Dict]:
-    """
-    박스플롯 시각화
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    columns : List[str]
-        시각화할 컬럼 리스트
-    config : PlotConfig, optional
-        플롯 설정 (None이면 기본값 사용)
-    
-    Returns:
-    --------
-    tuple: (figure, stats_dict)
-    """
+def plot_boxplot(df: pd.DataFrame, columns: List[str],
+                 config: Optional[PlotConfig] = None,
+                 show_outliers: bool = True,
+                 max_outliers: int = 10) -> Tuple[plt.Figure, Dict]:
+    """수치형 컬럼 박스플롯. IQR·이상치 표시. 반환: (figure, stats_dict)."""
     if config is None:
         config = PlotConfig()
     
@@ -133,10 +109,10 @@ def plot_boxplot(df: pd.DataFrame, columns: List[str],
         ax.axhline(y=stats['lower_bound'], color='orange', linestyle='--', linewidth=1.5, alpha=0.7)
         ax.axhline(y=stats['upper_bound'], color='orange', linestyle='--', linewidth=1.5, alpha=0.7)
         
-        if config.show_outliers and len(stats['outliers']) > 0:
+        if show_outliers and len(stats['outliers']) > 0:
             outliers = stats['outliers'].sort_values()
-            lower_outliers = outliers[outliers < stats['lower_bound']].head(config.max_outliers).values
-            upper_outliers = outliers[outliers > stats['upper_bound']].tail(config.max_outliers).values
+            lower_outliers = outliers[outliers < stats['lower_bound']].head(max_outliers).values
+            upper_outliers = outliers[outliers > stats['upper_bound']].tail(max_outliers).values
             
             if len(lower_outliers) > 0:
                 ax.scatter([1.05] * len(lower_outliers), lower_outliers, 
@@ -145,6 +121,10 @@ def plot_boxplot(df: pd.DataFrame, columns: List[str],
                 ax.scatter([1.05] * len(upper_outliers), upper_outliers, 
                           color='red', s=30, alpha=0.6, zorder=5)
         
+        q1, q3, med, mean = stats['q1'], stats['q3'], stats['median'], stats['mean']
+        for y_val, label in [(q1, f'Q1:{q1:.2f}'), (med, f'Med:{med:.2f}'), (q3, f'Q3:{q3:.2f}'), (mean, f'Mean:{mean:.2f}')]:
+            ax.text(1.02, y_val, label, fontsize=7, va='center', ha='left',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor='wheat', alpha=0.9))
         ax.set_ylabel('Value', fontsize=11)
         ax.set_title(col, fontsize=13, fontweight='bold')
         if config.grid:
@@ -161,27 +141,97 @@ def plot_boxplot(df: pd.DataFrame, columns: List[str],
     return fig, stats_dict
 
 
-def plot_histogram(df: pd.DataFrame, columns: List[str], 
+def plot_boxplot_by_group(df: pd.DataFrame, value_col: str, group_col: str,
+                          config: Optional[PlotConfig] = None,
+                          show_outliers: bool = True,
+                          max_outliers: int = 10) -> Tuple[plt.Figure, Dict]:
+    """그룹별 박스플롯. value_col 분포를 group_col 카테고리별로 그린다. value_col, group_col은 호출 시 지정. 반환: (figure, stats_dict)."""
+    if config is None:
+        config = PlotConfig()
+
+    if value_col not in df.columns:
+        raise ValueError(f"'{value_col}' 컬럼이 데이터프레임에 없습니다.")
+    if group_col not in df.columns:
+        raise ValueError(f"'{group_col}' 컬럼이 데이터프레임에 없습니다.")
+
+    groups = sorted(df[group_col].dropna().unique())
+    if len(groups) == 0:
+        raise ValueError(f"'{group_col}' 컬럼에 데이터가 없습니다.")
+
+    data_by_group = []
+    labels = []
+    stats_dict = {}
+    for group in groups:
+        series = df[df[group_col] == group][value_col].dropna()
+        if len(series) > 0:
+            data_by_group.append(series.values)
+            labels.append(str(group))
+            stats_dict[group] = _calculate_iqr_stats(series)
+        else:
+            data_by_group.append(np.array([]))
+            labels.append(str(group))
+
+    if len(data_by_group) == 0:
+        raise ValueError("시각화할 데이터가 없습니다.")
+
+    fig, ax = plt.subplots(figsize=config.figsize)
+    bp = ax.boxplot(
+        data_by_group,
+        labels=labels,
+        vert=True,
+        patch_artist=True,
+        showmeans=True,
+        meanline=True,
+        boxprops=dict(facecolor='lightblue', alpha=0.7),
+        medianprops=dict(color='red', linewidth=2),
+        meanprops=dict(color='green', linewidth=2, linestyle='--'),
+        whiskerprops=dict(color='black', linewidth=1.5),
+        capprops=dict(color='black', linewidth=1.5),
+    )
+
+    if show_outliers:
+        for idx, group in enumerate(groups):
+            if group not in stats_dict or not stats_dict[group]:
+                continue
+            stats = stats_dict[group]
+            outliers = stats.get('outliers', pd.Series(dtype=float))
+            if len(outliers) > 0:
+                x_pos = idx + 1
+                lower_outliers = outliers[outliers < stats['lower_bound']].head(max_outliers).values
+                upper_outliers = outliers[outliers > stats['upper_bound']].tail(max_outliers).values
+                if len(lower_outliers) > 0:
+                    ax.scatter([x_pos + 0.05] * len(lower_outliers), lower_outliers,
+                               color='red', s=30, alpha=0.6, zorder=5)
+                if len(upper_outliers) > 0:
+                    ax.scatter([x_pos + 0.05] * len(upper_outliers), upper_outliers,
+                               color='red', s=30, alpha=0.6, zorder=5)
+
+    for idx, group in enumerate(groups):
+        if group not in stats_dict or not stats_dict[group]:
+            continue
+        s = stats_dict[group]
+        q1, q3, med, mean = s['q1'], s['q3'], s['median'], s['mean']
+        x_pos = idx + 1
+        for y_val, label in [(q1, f'Q1:{q1:.2f}'), (med, f'Med:{med:.2f}'), (q3, f'Q3:{q3:.2f}'), (mean, f'Mean:{mean:.2f}')]:
+            ax.text(x_pos + 0.02, y_val, label, fontsize=6, va='center', ha='left',
+                    bbox=dict(boxstyle='round,pad=0.15', facecolor='wheat', alpha=0.9))
+
+    ax.set_ylabel(value_col, fontsize=11)
+    ax.set_xlabel(group_col, fontsize=11)
+    title = config.title if config.title else f'{value_col} by {group_col}'
+    ax.set_title(title, fontsize=13, fontweight='bold')
+    if config.grid:
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+
+    return fig, stats_dict
+
+
+def plot_histogram(df: pd.DataFrame, columns: List[str],
                    bins: Optional[Union[int, List]] = None,
                    config: Optional[PlotConfig] = None) -> plt.Figure:
-    """
-    히스토그램 시각화
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    columns : List[str]
-        시각화할 컬럼 리스트
-    bins : int or List, optional
-        히스토그램 구간 (None이면 자동 설정)
-    config : PlotConfig, optional
-        플롯 설정
-    
-    Returns:
-    --------
-    plt.Figure: 생성된 figure 객체
-    """
+    """수치형 컬럼 구간별 빈도(가로 막대). bins 미지정 시 10. 반환: figure."""
     if config is None:
         config = PlotConfig()
     
@@ -240,23 +290,9 @@ def plot_histogram(df: pd.DataFrame, columns: List[str],
 
 
 def plot_categorical(df: pd.DataFrame, columns: List[str],
-                    config: Optional[PlotConfig] = None) -> plt.Figure:
-    """
-    범주형 변수 분포 시각화
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    columns : List[str]
-        시각화할 범주형 컬럼 리스트
-    config : PlotConfig, optional
-        플롯 설정
-    
-    Returns:
-    --------
-    plt.Figure: 생성된 figure 객체
-    """
+                     config: Optional[PlotConfig] = None,
+                     show_stats: bool = False) -> plt.Figure:
+    """범주형 컬럼 카테고리별 빈도(가로 막대). 반환: figure."""
     if config is None:
         config = PlotConfig()
     
@@ -304,7 +340,7 @@ def plot_categorical(df: pd.DataFrame, columns: List[str],
         if config.grid:
             ax.grid(axis='x', alpha=0.3, linestyle='--')
         
-        if config.show_stats:
+        if show_stats:
             for i, (bar, value, pct) in enumerate(zip(bars, values, percentages)):
                 ax.text(bar.get_width() + total * 0.01, i, 
                        f'{value:,} ({pct}%)', 
@@ -321,33 +357,10 @@ def plot_categorical(df: pd.DataFrame, columns: List[str],
 
 
 def plot_histogram_by_group(df: pd.DataFrame, value_col: str, group_col: str,
-                           config: Optional[PlotConfig] = None,
-                           bins: int = 30, alpha: float = 0.7,
-                           side_by_side: bool = True) -> Tuple[plt.Figure, Dict]:
-    """
-    그룹별 히스토그램 비교 시각화
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    value_col : str
-        분포를 확인할 수치형 컬럼명
-    group_col : str
-        그룹을 나누는 범주형 컬럼명
-    config : PlotConfig, optional
-        플롯 설정
-    bins : int
-        히스토그램 구간 개수 (기본값: 30)
-    alpha : float
-        투명도 (기본값: 0.7)
-    side_by_side : bool
-        True: 나란히 비교, False: 겹쳐서 비교 (기본값: True)
-    
-    Returns:
-    --------
-    tuple: (figure, stats_dict)
-    """
+                            config: Optional[PlotConfig] = None,
+                            bins: int = 30, alpha: float = 0.7,
+                            side_by_side: bool = True) -> Tuple[plt.Figure, Dict]:
+    """그룹별 수치형 분포 비교. side_by_side: True 나란히 / False 겹침. 반환: (figure, stats_dict)."""
     if config is None:
         config = PlotConfig()
     
@@ -439,6 +452,7 @@ def plot_histogram_by_group(df: pd.DataFrame, value_col: str, group_col: str,
 
 # 하위 호환성을 위한 별칭
 visualization_boxplot_iqr_multiple = plot_boxplot
+visualization_boxplot_by_group = plot_boxplot_by_group
 visualization_bar_multiple = plot_histogram
 visualization_categorical_bar = plot_categorical
 visualization_histogram_by_group = plot_histogram_by_group
