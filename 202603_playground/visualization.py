@@ -104,27 +104,119 @@ def run_eda_visualization(
     
     
     # grouping histogram
-    # fig, _ = plot_histogram_by_group(
-    #     df, value_col='exam_score', group_col='gender',
-    #     config=PlotConfig(), bins=20, side_by_side=True,
-    # )
-    # fig.savefig('eda_results/histogram3.png', dpi=150, bbox_inches='tight')
-    # plt.close(fig)
+    fig, _ = plot_histogram_by_group(
+        df, value_col='tenure', group_col=target_col,
+        config=PlotConfig(), bins=20, side_by_side=True,
+    )
+    fig.savefig('eda_results/churn_by_tenure.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
 
-    # fig, _ = plot_histogram_by_group(
-    #     df, value_col='study_hours', group_col='sleep_quality',
-    #     config=PlotConfig(), bins=20, side_by_side=True,
-    # )
-    
-    # fig, stats = plot_boxplot_by_group(
-    #     df, value_col='exam_score', group_col='course',
-    #     config=PlotConfig(),
-    # )
-    # fig.savefig(os.path.join(output_dir, 'boxplot_by_gender.png'), dpi=150, bbox_inches='tight')
-    # plt.close(fig)
+    fig, _ = plot_histogram_by_group(
+        df, value_col=target_col, group_col='SeniorCitizen',
+        config=PlotConfig(), bins=20, side_by_side=True,
+    )
+    fig.savefig('eda_results/churn_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
 
-    # fig.savefig('eda_results/histogram2.png', dpi=150, bbox_inches='tight')
-    # plt.close(fig)
+
+    fig, _ = plot_histogram_by_group(
+        df, value_col=target_col, group_col='Contract',
+        config=PlotConfig(), bins=20, side_by_side=True,
+    )
+    fig.savefig('eda_results/contract_by_churn.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, _ = plot_histogram_by_group(
+        df, value_col='tenure', group_col='Contract',
+        config=PlotConfig(), bins=20, side_by_side=True,
+    )
+    fig.savefig('eda_results/contract_by_tenure.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col=target_col, group_col='InternetService',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/internet_service_by_churn.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='MonthlyCharges', group_col=target_col,
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/monthly_charges_by_churn2.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='TotalCharges', group_col=target_col,
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/total_charges_by_churn2.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='Partner_numeric', group_col='SeniorCitizen',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/partner_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='Dependents_numeric', group_col='SeniorCitizen',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/dependents_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='MonthlyCharges', group_col='Dependents_numeric',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/MonthlyCharges_by_Dependents.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col='MonthlyCharges', group_col='SeniorCitizen',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/monthly_charges_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_histogram_by_group(
+        df, value_col=target_col, group_col='PaymentMethod',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/payment_method_by_churn.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
+    fig, stats = plot_histogram_by_group(
+        df[df['SeniorCitizen'] == 1],   # 또는 df['SeniorCitizen_numeric'] == 1
+        value_col='MonthlyCharges',
+        group_col='Churn',
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/monthly_charges_by_churn_senior_only.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+
+    fig, stats = plot_boxplot_by_group(
+        df, value_col='MonthlyCharges', group_col=target_col,
+        config=PlotConfig(),
+    )
+    fig.savefig('eda_results/monthly_charges_by_churn.png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+    fig, stats = plot_boxplot_by_group(
+        df, value_col='TotalCharges', group_col=target_col,
+        config=PlotConfig(),
+    )
+    fig.savefig(os.path.join(output_dir, 'total_charges_by_churn.png'), dpi=150, bbox_inches='tight')
+    plt.close(fig)
+
+   
 
 
     # Categorical

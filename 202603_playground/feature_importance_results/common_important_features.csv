@@ -1,0 +1,17 @@
+﻿Feature,Average_Importance
+tenure,0.15450478439532425
+Contract_numeric,0.15352938106795186
+SeniorCitizen_x_MonthlyCharges_FE,0.07911078978101309
+MonthlyCharges,0.02603056585269961
+TotalCharges,0.02056887598562181
+Dependents_numeric_x_MonthlyCharges_FE,0.012008444629036483
+OnlineSecurity_numeric,0.009680923810876681
+StreamingTV_numeric,0.008300892599666683
+StreamingMovies_numeric,0.007609117629571785
+SeniorCitizen_tenure_FE,0.0055710121372140285
+Dependents_numeric,0.0052289362906637535
+MultipleLines_numeric,0.004840858875135013
+SeniorCitizen,0.004533023619718573
+PhoneService_x_MultipleLines_numeric_FE,0.003863959339430544
+TechSupport_numeric,0.00301584370636452
+OnlineBackup_numeric,0.0014365834935424705

@@ -1,53 +1,49 @@
 {
   "task_type": "classification",
-  "timestamp": "2026-01-24 17:16:58",
+  "timestamp": "2026-03-03 10:37:37",
   "hyperparameters": {
-    "xgboost": {
-      "max_depth": 8,
-      "learning_rate": 0.0861091630490229,
-      "min_child_weight": 3,
-      "subsample": 0.9363276311531847,
-      "colsample_bytree": 0.8475821878546004,
-      "gamma": 0.31746028501768164,
-      "reg_alpha": 0.9683416403731477,
-      "reg_lambda": 0.0021407420339273646
-    },
     "catboost": {
-      "bootstrap_type": "Bernoulli",
-      "iterations": 1854,
-      "learning_rate": 0.09945293924672832,
-      "depth": 6,
-      "l2_leaf_reg": 1.7125849259782566,
-      "random_strength": 0.2856364142892501
+      "bootstrap_type": "Bayesian",
+      "iterations": 2044,
+      "learning_rate": 0.11306809761191138,
+      "depth": 4,
+      "l2_leaf_reg": 9.547071874488308,
+      "random_strength": 0.9516037649673834,
+      "min_data_in_leaf": 183,
+      "bagging_temperature": 0.6805845132422833
     },
     "lightgbm": {
-      "num_leaves": 173,
-      "learning_rate": 0.10784298988937857,
-      "max_depth": 9,
-      "min_data_in_leaf": 83,
-      "feature_fraction": 0.5502548853380904,
-      "bagging_fraction": 0.8808609028366424,
-      "bagging_freq": 6,
-      "lambda_l1": 0.21876623320861574,
-      "lambda_l2": 0.0018809260719941468
+      "n_estimators": 1704,
+      "num_leaves": 67,
+      "learning_rate": 0.011913721143115499,
+      "max_depth": 11,
+      "min_data_in_leaf": 195,
+      "feature_fraction": 0.5043469320106614,
+      "bagging_fraction": 0.874496735684752,
+      "bagging_freq": 1,
+      "lambda_l1": 9.834612983658072,
+      "lambda_l2": 0.3128483848485003
+    },
+    "xgboost": {
+      "n_estimators": 1800,
+      "max_depth": 4,
+      "learning_rate": 0.0466148350609317,
+      "min_child_weight": 10,
+      "subsample": 0.7467813979547293,
+      "colsample_bytree": 0.532133824277049,
+      "gamma": 0.17722614926562846,
+      "reg_alpha": 0.004152453341754333,
+      "reg_lambda": 0.008688435767098723
     }
   },
   "additional_info": {
-    "cv_scores": {
-      "catboost": {
-        "mean": 8.75686422668902,
-        "std": 0.012649919614017287
-      },
-      "lightgbm": {
-        "mean": 9.349090655098095,
-        "std": 0.012387176135654291
-      },
-      "xgboost": {
-        "mean": 9.363567008137453,
-        "std": 0.01397925962121735
-      }
-    },
-    "is_optimized": false,
-    "note": "기본 파라미터"
+    "n_trials": 50,
+    "random_state": 42,
+    "optimization_method": "Optuna",
+    "n_folds": 5,
+    "use_gpu": true,
+    "target_col": "Churn",
+    "params_filepath": "C:\\Users\\30032\\OneDrive\\바탕 화면\\workspace\\kaggle\\202603_playground\\best_hyperparameters.json",
+    "optuna_sample_size": null
   }
 }

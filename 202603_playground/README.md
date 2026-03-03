@@ -18,7 +18,7 @@ Kaggle Playground 프로젝트. `common/` 공통 모듈을 사용하는 **분류
 4. 모델 학습 (K-Fold CV)
    - CatBoost, LightGBM, XGBoost
    ↓
-5. 앙상블 (가중 평균, 가중치 최적화)
+5. 앙상블 (config 선택: 가중 평균 / 단순 평균 / Ridge 메타모델)
    ↓
 6. 제출 파일 생성 (submission.csv)
 ```
@@ -103,11 +103,15 @@ python visualization.py
 2. **특성 공학**: `config.py`의 `FEATURE_ENGINEERING_CONFIG`에 따라 적용
 3. **인코딩**: OneHot / Ordinal — CatBoost는 원본 범주형, LightGBM/XGBoost는 인코딩된 컬럼 사용
 4. **모델링**: `ModelTrainer`로 CatBoost, LightGBM, XGBoost 각각 K-Fold 학습
-5. **평가**: OOF 예측으로 앙상블 가중치 최적화
-6. **제출**: `submission.csv` 생성 (id, exam_score)
+5. **앙상블**: OOF 예측으로 앙상블 — `ENSEMBLE_METHOD`에 따라 가중 평균(최적화)·단순 평균 또는 **Ridge 메타모델**(2차 스태킹) 적용
+6. **제출**: `submission.csv` 생성 (id, Churn 확률)
 
 ## 옵션 (config.py)
 
+- **ENSEMBLE_METHOD**: `'weighted_average'`(가중치 최적화) | `'simple_average'` | `'ridge_meta'`(Ridge 2차 메타모델)
+- **RIDGE_ALPHA**: `ridge_meta` 사용 시 Ridge 정규화 강도 (Optuna 미사용 시 적용, 기본 1.0)
+- **OPTUNA_RIDGE_ALPHA**: `True`면 Ridge alpha를 Optuna로 최적화
+- **RIDGE_ALPHA_N_TRIALS**: Ridge alpha Optuna 시도 횟수 (기본 20)
 - **USE_OPTUNA**: `True` 시 Optuna로 하이퍼파라미터 탐색
 - **USE_SAVED_PARAMS**: `True`면 `best_hyperparameters.json` 사용, `None`이면 파일 존재 시 자동 사용
 - **OPTUNA_SAMPLE_SIZE**: 대용량일 때 샘플 수 제한 (예: 50000)
