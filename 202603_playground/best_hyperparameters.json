@@ -13,27 +13,27 @@
       "bagging_temperature": 0.6805845132422833
     },
     "lightgbm": {
-      "n_estimators": 1704,
-      "num_leaves": 67,
+      "bagging_fraction": 0.874496735684752,
+      "bagging_freq": 1,
+      "feature_fraction": 0.5043469320106614,
+      "lambda_l1": 9.834612983658072,
+      "lambda_l2": 0.3128483848485003,
       "learning_rate": 0.011913721143115499,
       "max_depth": 11,
       "min_data_in_leaf": 195,
-      "feature_fraction": 0.5043469320106614,
-      "bagging_fraction": 0.874496735684752,
-      "bagging_freq": 1,
-      "lambda_l1": 9.834612983658072,
-      "lambda_l2": 0.3128483848485003
+      "n_estimators": 1704,
+      "num_leaves": 67
     },
     "xgboost": {
-      "n_estimators": 1800,
-      "max_depth": 4,
-      "learning_rate": 0.0466148350609317,
-      "min_child_weight": 10,
-      "subsample": 0.7467813979547293,
       "colsample_bytree": 0.532133824277049,
       "gamma": 0.17722614926562846,
+      "learning_rate": 0.0466148350609317,
+      "max_depth": 4,
+      "min_child_weight": 10,
+      "n_estimators": 1800,
       "reg_alpha": 0.004152453341754333,
-      "reg_lambda": 0.008688435767098723
+      "reg_lambda": 0.008688435767098723,
+      "subsample": 0.7467813979547293
     }
   },
   "additional_info": {

@@ -34,11 +34,11 @@ OPTUNA_RIDGE_ALPHA = True  # True면 Ridge alpha를 Optuna로 최적화
 RIDGE_ALPHA_N_TRIALS = 20  # Ridge alpha Optuna 시도 횟수
 
 # ========== 하이퍼파라미터 최적화 설정 ==========
-USE_OPTUNA = True  # True로 설정하면 Optuna 최적화 실행 (시간이 오래 걸림)
+USE_OPTUNA = False  # True로 설정하면 Optuna 최적화 실행 (시간이 오래 걸림)
 N_TRIALS = 50  # Optuna 시도 횟수
 OPTUNA_SAMPLE_SIZE = None  # 예: 50000 (5만 개만 사용)
 USE_SAVED_PARAMS = False  # None으로 설정하면 자동 감지
-USE_PERMUTATION_IMPORTANCE = True  # True로 설정하면 Permutation Importance 분석 실행
+USE_PERMUTATION_IMPORTANCE = False  # True로 설정하면 Permutation Importance 분석 실행
 
 # ========== 파일 경로 ==========
 # Optuna 저장 파일: 이 playground 폴더 아래 best_hyperparameters.json
