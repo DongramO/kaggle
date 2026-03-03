@@ -46,22 +46,7 @@ def transform_numeric_features(
     numeric_cols: List[str],
     transformations: Optional[List[str]] = None
 ) -> pd.DataFrame:
-    """
-    수치형 특성에 변환 적용 (log, sqrt, square, reciprocal 등)
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numeric_cols : List[str]
-        변환할 수치형 컬럼 리스트
-    transformations : List[str], optional
-        적용할 변환 방법 리스트 (기본값: ['log', 'sqrt'])
-    
-    Returns:
-    --------
-    pd.DataFrame: 변환이 적용된 데이터프레임
-    """
+    """수치형 특성에 변환 적용 (log, sqrt, square, reciprocal 등)"""
     if transformations is None:
         transformations = ['log', 'sqrt']
     
@@ -90,22 +75,7 @@ def create_interaction_features(
     feature_pairs: List[tuple],
     operations: Optional[List[str]] = None
 ) -> pd.DataFrame:
-    """
-    특성 간 상호작용 특성 생성 (multiply, divide, add, subtract)
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    feature_pairs : List[tuple]
-        (col1, col2) 형태의 특성 쌍 리스트
-    operations : List[str], optional
-        각 쌍에 적용할 연산 리스트 (None이면 모두 'multiply')
-    
-    Returns:
-    --------
-    pd.DataFrame: 상호작용 특성이 추가된 데이터프레임
-    """
+    """특성 간 상호작용 특성 생성 (multiply, divide, add, subtract)"""
     df = df.copy()
     eps = 1e-6
     
@@ -145,24 +115,7 @@ def create_ratio_features(
     denominator_cols: List[str],
     feature_names: Optional[Union[List[str], str]] = None
 ) -> pd.DataFrame:
-    """
-    비율 특성 생성
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numerator_cols : List[str]
-        분자 컬럼 리스트
-    denominator_cols : List[str]
-        분모 컬럼 리스트
-    feature_names : Union[List[str], str], optional
-        생성될 특성 이름 (List[str], str suffix, 또는 None)
-    
-    Returns:
-    --------
-    pd.DataFrame: 비율 특성이 추가된 데이터프레임
-    """
+    """비율 특성 생성"""
     df = df.copy()
     eps = 1e-6
     
@@ -193,22 +146,7 @@ def create_statistical_features(
     feature_groups: List[List[str]],
     statistics: Optional[List[str]] = None
 ) -> pd.DataFrame:
-    """
-    여러 특성의 통계적 특성 생성 (mean, std, max, min, median, sum 등)
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    feature_groups : List[List[str]]
-        통계를 계산할 특성 그룹 리스트
-    statistics : List[str], optional
-        계산할 통계량 리스트 (기본값: ['mean', 'std', 'max', 'min'])
-    
-    Returns:
-    --------
-    pd.DataFrame: 통계적 특성이 추가된 데이터프레임
-    """
+    """여러 특성의 통계적 특성 생성 (mean, std, max, min, median, sum 등)"""
     if statistics is None:
         statistics = ['mean', 'std', 'max', 'min']
     
@@ -245,26 +183,7 @@ def create_categorical_encoded_interaction(
     encoded_cols_tag: str = '_encoded',
     feature_name: Optional[str] = None
 ) -> pd.DataFrame:
-    """
-    범주형 one-hot 인코딩 컬럼과 수치형 컬럼의 상호작용 특성 생성
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    categorical_col : str
-        원본 범주형 컬럼 이름
-    numeric_col : str
-        곱할 수치형 컬럼 이름
-    encoded_cols_tag : str
-        인코딩된 컬럼 태그 (기본값: '_encoded')
-    feature_name : str, optional
-        생성될 특성 이름 (None이면 자동 생성)
-    
-    Returns:
-    --------
-    pd.DataFrame: 상호작용 특성이 추가된 데이터프레임
-    """
+    """범주형 one-hot 인코딩 컬럼과 수치형 컬럼의 상호작용 특성 생성"""
     df = df.copy()
     
     # 컬럼 존재 확인
@@ -311,22 +230,7 @@ def create_categorical_interactions(
     categorical_pairs: List[tuple],
     separator: str = '_'
 ) -> pd.DataFrame:
-    """
-    범주형 특성 간 조합 특성 생성
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    categorical_pairs : List[tuple]
-        (col1, col2) 형태의 범주형 컬럼 튜플 리스트
-    separator : str
-        조합된 특성 이름의 구분자 (기본값: '_')
-    
-    Returns:
-    --------
-    pd.DataFrame: 범주형 조합 특성이 추가된 데이터프레임
-    """
+    """범주형 특성 간 조합 특성 생성"""
     df = df.copy()
     
     for col1, col2 in categorical_pairs:
@@ -339,30 +243,38 @@ def create_categorical_interactions(
     return df
 
 
+def convert_ordered_categorical_to_numeric(
+    df: pd.DataFrame,
+    categorical_col: str,
+    mapping: Dict[str, Union[int, float]]
+) -> pd.DataFrame:
+    """순서가 있는 범주형 변수를 숫자로 변환"""
+    df = df.copy()
+    
+    if categorical_col not in df.columns:
+        return df
+    
+    numeric_col_name = f'{categorical_col}_numeric'
+    df[numeric_col_name] = df[categorical_col].map(mapping)
+    
+    # 매핑되지 않은 값은 NaN이 될 수 있으므로 처리
+    if df[numeric_col_name].isna().any():
+        unmapped = df[df[numeric_col_name].isna()][categorical_col].unique()
+        print(f"   ⚠️ {categorical_col}에서 매핑되지 않은 값: {unmapped}")
+        # 기본값으로 가장 작은 값 사용
+        default_value = min(mapping.values()) if mapping else 0
+        df[numeric_col_name] = df[numeric_col_name].fillna(default_value)
+    
+    return df
+
+
 def clip_outliers(
     df: pd.DataFrame,
     numeric_cols: List[str],
     clip_rules: Optional[dict] = None,
     default_quantile: float = 0.995
 ) -> pd.DataFrame:
-    """
-    이상치 클리핑
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numeric_cols : List[str]
-        클리핑할 수치형 컬럼 리스트
-    clip_rules : dict, optional
-        컬럼별 클리핑 규칙 {col_name: quantile_value} (기본값: 모든 컬럼에 default_quantile 적용)
-    default_quantile : float
-        기본 분위수 값 (기본값: 0.995)
-    
-    Returns:
-    --------
-    pd.DataFrame: 이상치가 클리핑된 데이터프레임
-    """
+    """이상치 클리핑"""
     df = df.copy()
     
     if clip_rules is None:
@@ -385,20 +297,7 @@ def create_frequency_features(
     df: pd.DataFrame,
     categorical_cols: List[str]
 ) -> pd.DataFrame:
-    """
-    범주형 특성의 빈도 인코딩 특성 생성
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    categorical_cols : List[str]
-        빈도 인코딩할 범주형 컬럼 리스트
-    
-    Returns:
-    --------
-    pd.DataFrame: 빈도 인코딩 특성이 추가된 데이터프레임
-    """
+    """범주형 특성의 빈도 인코딩 특성 생성"""
     df = df.copy()
     
     for col in categorical_cols:
@@ -417,24 +316,7 @@ def create_binning_features(
     n_bins: int = 5,
     strategy: str = 'quantile'
 ) -> pd.DataFrame:
-    """
-    수치형 특성을 구간화(binning)하여 범주형 특성으로 변환
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numeric_cols : List[str]
-        구간화할 수치형 컬럼 리스트
-    n_bins : int
-        구간 개수 (기본값: 5)
-    strategy : str
-        구간화 전략 ('quantile', 'uniform', 'kmeans', 기본값: 'quantile')
-    
-    Returns:
-    --------
-    pd.DataFrame: 구간화된 특성이 추가된 데이터프레임
-    """
+    """수치형 특성을 구간화(binning)하여 범주형 특성으로 변환"""
     from sklearn.preprocessing import KBinsDiscretizer
     
     df = df.copy()
@@ -463,24 +345,7 @@ def create_polynomial_features(
     degree: int = 2,
     interaction_only: bool = False
 ) -> pd.DataFrame:
-    """
-    다항식 특성 생성
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numeric_cols : List[str]
-        다항식 특성을 생성할 수치형 컬럼 리스트
-    degree : int
-        다항식 차수 (기본값: 2)
-    interaction_only : bool
-        상호작용 항만 생성할지 여부 (기본값: False)
-    
-    Returns:
-    --------
-    pd.DataFrame: 다항식 특성이 추가된 데이터프레임
-    """
+    """다항식 특성 생성"""
     from sklearn.preprocessing import PolynomialFeatures
     
     df = df.copy()
@@ -508,26 +373,7 @@ def apply_feature_engineering_pipeline(
     target_col: Optional[str] = None,
     config: Optional[dict] = None
 ) -> pd.DataFrame:
-    """
-    전체 feature engineering 파이프라인 적용
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        입력 데이터프레임
-    numeric_cols : List[str]
-        수치형 컬럼 리스트
-    categorical_cols : List[str]
-        범주형 컬럼 리스트
-    target_col : str, optional
-        타겟 컬럼 이름 (타겟 인코딩에 사용)
-    config : dict, optional
-        파이프라인 설정 딕셔너리
-    
-    Returns:
-    --------
-    pd.DataFrame: feature engineering이 적용된 데이터프레임
-    """
+    """전체 feature engineering 파이프라인 적용"""
     if config is None:
         config = {}
     

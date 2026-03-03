@@ -3,6 +3,7 @@
 """
 import numpy as np
 import pandas as pd
+import warnings
 import matplotlib.pyplot as plt
 from typing import List, Optional, Dict, Tuple, Union
 from dataclasses import dataclass
@@ -373,10 +374,16 @@ def plot_histogram_by_group(df: pd.DataFrame, value_col: str, group_col: str,
     if len(groups) == 0:
         raise ValueError(f"'{group_col}' 컬럼에 데이터가 없습니다.")
     
+    value_data = df[value_col]
+    if not pd.api.types.is_numeric_dtype(value_data):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            value_data = pd.to_numeric(value_data, errors='coerce')
+    
     stats_dict = {}
     data_by_group = {}
     for group in groups:
-        group_data = df[df[group_col] == group][value_col].dropna()
+        group_data = value_data[df[group_col] == group].dropna()
         data_by_group[group] = group_data
         
         if len(group_data) > 0:

@@ -15,7 +15,8 @@ import xgboost as xgb
 
 # 평가 및 검증
 from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.metrics import mean_squared_error, roc_auc_score, log_loss
+from sklearn.linear_model import Ridge
 
 # 하이퍼파라미터 최적화
 try:
@@ -34,18 +35,7 @@ class HyperparameterOptimizer:
     """Optuna를 사용한 하이퍼파라미터 최적화 클래스"""
     
     def __init__(self, task_type: str = 'regression', random_state: int = 42, use_gpu: bool = False):
-        """
-        HyperparameterOptimizer 초기화
-        
-        Parameters:
-        -----------
-        task_type : str
-            작업 타입 ('regression' or 'classification')
-        random_state : int
-            랜덤 시드 (기본값: 42)
-        use_gpu : bool
-            GPU 사용 여부 (기본값: False)
-        """
+        """HyperparameterOptimizer 초기화"""
         if not OPTUNA_AVAILABLE:
             raise ImportError("Optuna가 설치되어 있지 않습니다. 'pip install optuna'로 설치해주세요.")
         
@@ -56,26 +46,7 @@ class HyperparameterOptimizer:
         
     def optimize_catboost(self, X_train, y_train, n_trials: int = 50, 
                          cat_features: Optional[List] = None, **kwargs):
-        """
-        CatBoost 하이퍼파라미터 최적화
-        
-        Parameters:
-        -----------
-        X_train : pd.DataFrame or np.ndarray
-            학습 데이터
-        y_train : pd.Series or np.ndarray
-            타겟 데이터
-        n_trials : int
-            Optuna 시도 횟수 (기본값: 50)
-        cat_features : List, optional
-            범주형 특성 리스트
-        **kwargs
-            추가 파라미터
-            
-        Returns:
-        --------
-        dict: 최적화된 하이퍼파라미터
-        """
+        """CatBoost 하이퍼파라미터 최적화"""
         def objective(trial):
             # bootstrap_type을 먼저 선택
             bootstrap_type = trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS'])
@@ -83,21 +54,25 @@ class HyperparameterOptimizer:
             if self.task_type == 'regression':
                 params = {
                     # CatBoost 최적화: 더 많은 iterations와 낮은 learning_rate 범위
-                    'iterations': trial.suggest_int('iterations', 500, 2000),  # 범위 증가: 500-2000
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.15, log=True),  # 0.3 -> 0.15로 제한 (CatBoost 권장 범위)
-                    'depth': trial.suggest_int('depth', 4, 10),
-                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1, 100, log=True),
-                    'random_strength': trial.suggest_float('random_strength', 0, 1),
+                    'iterations': trial.suggest_int('iterations', 1000, 3000),  # 범위 확장: 1000-3000
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),  # 범위 확장: 0.01-0.2
+                    'depth': trial.suggest_int('depth', 4, 12),  # 범위 확장: 4-12
+                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 0.5, 200, log=True),  # 범위 확장: 0.5-200
+                    'random_strength': trial.suggest_float('random_strength', 0, 2),  # 범위 확장: 0-2
                     'bootstrap_type': bootstrap_type,
                     'random_state': self.random_state,
                     'verbose': False,
                     'allow_writing_files': False,
                     # 추가 파라미터
-                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-                    'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.5, 1.0),
-                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 200),  # 범위 확장: 1-200
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거 (수동 CV에서 eval_set 사용)
                 }
+                # subsample은 bootstrap_type='Bayesian'일 때 사용 불가
+                if bootstrap_type != 'Bayesian':
+                    params['subsample'] = trial.suggest_float('subsample', 0.4, 1.0)  # 범위 확장: 0.4-1.0
+                # colsample_bylevel은 GPU 모드에서 pairwise ranking 모드에서만 지원되므로 CPU 모드일 때만 추가
+                if not self.use_gpu:
+                    params['colsample_bylevel'] = trial.suggest_float('colsample_bylevel', 0.5, 1.0)
                 # bagging_temperature는 bootstrap_type='Bayesian'일 때만 사용 가능
                 if bootstrap_type == 'Bayesian':
                     params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 1)
@@ -108,21 +83,25 @@ class HyperparameterOptimizer:
             else:
                 params = {
                     # CatBoost 최적화: 더 많은 iterations와 낮은 learning_rate 범위
-                    'iterations': trial.suggest_int('iterations', 500, 2000),  # 범위 증가: 500-2000
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.15, log=True),  # 0.3 -> 0.15로 제한 (CatBoost 권장 범위)
-                    'depth': trial.suggest_int('depth', 4, 10),
-                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1, 100, log=True),
-                    'random_strength': trial.suggest_float('random_strength', 0, 1),
+                    'iterations': trial.suggest_int('iterations', 1000, 3000),  # 범위 확장: 1000-3000
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),  # 범위 확장: 0.01-0.2
+                    'depth': trial.suggest_int('depth', 4, 12),  # 범위 확장: 4-12
+                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 0.5, 200, log=True),  # 범위 확장: 0.5-200
+                    'random_strength': trial.suggest_float('random_strength', 0, 2),  # 범위 확장: 0-2
                     'bootstrap_type': bootstrap_type,
                     'random_state': self.random_state,
                     'verbose': False,
                     'allow_writing_files': False,
                     # 추가 파라미터
-                    'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-                    'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.5, 1.0),
-                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 200),  # 범위 확장: 1-200
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거 (수동 CV에서 eval_set 사용)
                 }
+                # subsample은 bootstrap_type='Bayesian'일 때 사용 불가
+                if bootstrap_type != 'Bayesian':
+                    params['subsample'] = trial.suggest_float('subsample', 0.4, 1.0)  # 범위 확장: 0.4-1.0
+                # colsample_bylevel은 GPU 모드에서 pairwise ranking 모드에서만 지원되므로 CPU 모드일 때만 추가
+                if not self.use_gpu:
+                    params['colsample_bylevel'] = trial.suggest_float('colsample_bylevel', 0.5, 1.0)
                 # bagging_temperature는 bootstrap_type='Bayesian'일 때만 사용 가능
                 if bootstrap_type == 'Bayesian':
                     params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 1)
@@ -192,27 +171,15 @@ class HyperparameterOptimizer:
         best_value = study.best_value or float('inf')
         print(f"  ✅ 최적화 완료! Best Score: {best_value:.6f}")
         self.best_params['catboost'] = study.best_params
+        
+        # Optuna 로그 저장
+        if hasattr(self, 'optuna_log_path') and self.optuna_log_path:
+            save_optuna_log(study, 'catboost', self.optuna_log_path, n_trials)
+        
         return study.best_params
     
     def optimize_lightgbm(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """
-        LightGBM 하이퍼파라미터 최적화
-        
-        Parameters:
-        -----------
-        X_train : pd.DataFrame or np.ndarray
-            학습 데이터
-        y_train : pd.Series or np.ndarray
-            타겟 데이터
-        n_trials : int
-            Optuna 시도 횟수 (기본값: 50)
-        **kwargs
-            추가 파라미터
-            
-        Returns:
-        --------
-        dict: 최적화된 하이퍼파라미터
-        """
+        """LightGBM 하이퍼파라미터 최적화"""
         def objective(trial):
             if self.task_type == 'regression':
                 params = {
@@ -231,7 +198,7 @@ class HyperparameterOptimizer:
                     'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': -1,
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
                 }
                 # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'lightgbm'))
@@ -254,7 +221,7 @@ class HyperparameterOptimizer:
                     'lambda_l2': trial.suggest_float('lambda_l2', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': -1,
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
                 }
                 # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'lightgbm'))
@@ -296,27 +263,15 @@ class HyperparameterOptimizer:
         best_value = study.best_value or float('inf')
         print(f"  ✅ 최적화 완료! Best Score: {best_value:.6f}")
         self.best_params['lightgbm'] = study.best_params
+        
+        # Optuna 로그 저장
+        if hasattr(self, 'optuna_log_path') and self.optuna_log_path:
+            save_optuna_log(study, 'lightgbm', self.optuna_log_path, n_trials)
+        
         return study.best_params
     
     def optimize_xgboost(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """
-        XGBoost 하이퍼파라미터 최적화
-        
-        Parameters:
-        -----------
-        X_train : pd.DataFrame or np.ndarray
-            학습 데이터
-        y_train : pd.Series or np.ndarray
-            타겟 데이터
-        n_trials : int
-            Optuna 시도 횟수 (기본값: 50)
-        **kwargs
-            추가 파라미터
-            
-        Returns:
-        --------
-        dict: 최적화된 하이퍼파라미터
-        """
+        """XGBoost 하이퍼파라미터 최적화"""
         def objective(trial):
             if self.task_type == 'regression':
                 params = {
@@ -333,7 +288,8 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
+                    # Optuna 최적화 중에는 early stopping을 사용하지 않음
                 }
                 # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'xgboost'))
@@ -354,7 +310,8 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
-                    'early_stopping_rounds': trial.suggest_int('early_stopping_rounds', 10, 200),
+                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
+                    # Optuna 최적화 중에는 early stopping을 사용하지 않음
                 }
                 # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'xgboost'))
@@ -396,47 +353,19 @@ class HyperparameterOptimizer:
         best_value = study.best_value or float('inf')
         print(f"  ✅ 최적화 완료! Best Score: {best_value:.6f}")
         self.best_params['xgboost'] = study.best_params
+        
+        # Optuna 로그 저장
+        if hasattr(self, 'optuna_log_path') and self.optuna_log_path:
+            save_optuna_log(study, 'xgboost', self.optuna_log_path, n_trials)
+        
         return study.best_params
 
 
 def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regression',
                               n_trials=50, random_state=42, use_saved_params=False,
                               params_filepath=None, encoded_cols_tag='_encoded', use_gpu=False,
-                              sample_size=None, additional_save_info=None):
-    """
-    하이퍼파라미터 최적화 또는 저장된 파라미터 로드
-    
-    Parameters:
-    -----------
-    X_train : pd.DataFrame
-        학습 데이터
-    y_train : pd.Series
-        타겟 데이터
-    categorical_cols : List[str]
-        범주형 컬럼 리스트
-    task_type : str
-        작업 타입 ('regression' or 'classification')
-    n_trials : int
-        Optuna 시도 횟수 (기본값: 50)
-    random_state : int
-        랜덤 시드 (기본값: 42)
-    use_saved_params : bool
-        저장된 파라미터 사용 여부 (기본값: False)
-    params_filepath : str
-        파라미터 파일 경로
-    encoded_cols_tag : str
-        인코딩된 컬럼 태그 (기본값: '_encoded')
-    use_gpu : bool
-        GPU 사용 여부 (기본값: False)
-    sample_size : int, optional
-        샘플 크기 (속도 개선용)
-    additional_save_info : dict, optional
-        JSON에 함께 저장할 상수 (n_folds, use_gpu 등). 저장 경로·재현용.
-
-    Returns:
-    --------
-    dict: 모델별 최적화된 하이퍼파라미터
-    """
+                              sample_size=None, additional_save_info=None, model_types=None):
+    """하이퍼파라미터 최적화 또는 저장된 파라미터 로드"""
     # use_saved_params가 True이고 파일이 존재하면 저장된 파라미터 사용
     # 단, use_optuna가 True인 경우는 Optuna 최적화를 실행 (use_saved_params 무시)
     # use_optuna는 optimize_hyperparameters 함수에서 받지 않으므로, 
@@ -480,11 +409,24 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
     optimizer = HyperparameterOptimizer(task_type=task_type, random_state=random_state, use_gpu=use_gpu)
     best_params = {}
     
+    # 모델 타입 기본값 설정
+    if model_types is None:
+        model_types = ['catboost', 'lightgbm']
+    
+    # Optuna 로그 파일 경로 설정
+    if params_filepath:
+        log_dir = os.path.dirname(params_filepath) if os.path.dirname(params_filepath) else '.'
+        log_filename = 'optuna_optimization_log.json'
+        optuna_log_path = os.path.join(log_dir, log_filename)
+        optimizer.optuna_log_path = optuna_log_path
+    else:
+        optuna_log_path = None
+
     # 모델별로 사용할 컬럼 준비 (샘플링된 데이터 사용)
     encoded_cols = [col for col in X_train_sample.columns if col.endswith(encoded_cols_tag)]
     
     # 각 모델별로 최적화
-    for model_type in ['xgboost', 'catboost', 'lightgbm']:
+    for model_type in model_types:
         print(f"\n{'='*60}")
         print(f"🔍 {model_type.upper()} 하이퍼파라미터 최적화 (n_trials={n_trials})")
         print(f"{'='*60}")
@@ -559,22 +501,43 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
     return best_params
 
 
+def optimize_ridge_alpha(predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray,
+                         task_type: str = 'classification', scoring_metric: str = 'logloss',
+                         n_trials: int = 20, alpha_low: float = 1e-3, alpha_high: float = 1e3,
+                         random_state: int = 42) -> float:
+    """
+    Ridge 메타모델의 alpha를 Optuna로 최적화. 최소화할 점수 반환(로그리스는 그대로, AUC는 -AUC).
+    """
+    if not OPTUNA_AVAILABLE:
+        raise ImportError("Optuna가 설치되어 있지 않습니다. 'pip install optuna'로 설치해주세요.")
+    if not predictions_dict:
+        raise ValueError("predictions_dict가 비어있습니다.")
+    y_true = np.asarray(y_true)
+    model_names = sorted(predictions_dict.keys())
+    X_meta = np.column_stack([predictions_dict[n] for n in model_names])
+
+    def objective(trial):
+        alpha = trial.suggest_float('ridge_alpha', alpha_low, alpha_high, log=True)
+        ridge = Ridge(alpha=alpha).fit(X_meta, y_true)
+        pred = ridge.predict(X_meta)
+        if task_type == 'classification':
+            pred = np.clip(pred, 0.0, 1.0)
+        if scoring_metric == 'logloss':
+            return float(log_loss(y_true, pred))
+        if scoring_metric in ('auto', 'auc'):
+            return -float(roc_auc_score(y_true, pred))
+        if scoring_metric == 'accuracy':
+            return -float(np.mean((pred > 0.5).astype(int) == y_true))
+        return -float(roc_auc_score(y_true, pred))
+
+    study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=random_state))
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+    return float(study.best_params['ridge_alpha'])
+
+
 def save_hyperparameters(best_params: Dict[str, dict], filepath: str, 
                          task_type: str = 'regression', additional_info: Optional[dict] = None):
-    """
-    최적화된 하이퍼파라미터를 JSON 파일로 저장
-    
-    Parameters:
-    -----------
-    best_params : dict
-        {model_type: params} 형태의 딕셔너리
-    filepath : str
-        저장할 파일 경로
-    task_type : str
-        작업 타입 ('regression' or 'classification')
-    additional_info : dict, optional
-        추가 정보 (CV 점수, 날짜 등)
-    """
+    """최적화된 하이퍼파라미터를 JSON 파일로 저장"""
     save_data = {
         'task_type': task_type,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -594,18 +557,7 @@ def save_hyperparameters(best_params: Dict[str, dict], filepath: str,
 
 
 def load_hyperparameters(filepath: str) -> Dict[str, dict]:
-    """
-    저장된 하이퍼파라미터를 JSON 파일에서 불러오기
-    
-    Parameters:
-    -----------
-    filepath : str
-        파일 경로
-        
-    Returns:
-    --------
-    dict: {model_type: params} 형태의 딕셔너리
-    """
+    """저장된 하이퍼파라미터를 JSON 파일에서 불러오기"""
     with open(filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
@@ -614,3 +566,52 @@ def load_hyperparameters(filepath: str) -> Dict[str, dict]:
     print(f"  Timestamp: {data.get('timestamp', 'unknown')}")
     
     return data.get('hyperparameters', {})
+
+
+def save_optuna_log(study, model_type: str, log_filepath: str, n_trials: int):
+    """Optuna 최적화 결과를 별도 파일에 기록"""
+    log_data = {
+        'model_type': model_type,
+        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'n_trials': n_trials,
+        'best_value': float(study.best_value) if study.best_value is not None else None,
+        'best_params': study.best_params,
+        'n_completed_trials': len(study.trials),
+        'trials': []
+    }
+    
+    # 각 trial 결과 기록
+    for trial in study.trials:
+        trial_data = {
+            'number': trial.number,
+            'value': float(trial.value) if trial.value is not None else None,
+            'params': trial.params,
+            'state': trial.state.name if hasattr(trial.state, 'name') else str(trial.state),
+            'datetime_start': trial.datetime_start.isoformat() if trial.datetime_start else None,
+            'datetime_complete': trial.datetime_complete.isoformat() if trial.datetime_complete else None,
+        }
+        log_data['trials'].append(trial_data)
+    
+    # 기존 로그가 있으면 불러와서 추가
+    if os.path.exists(log_filepath):
+        try:
+            with open(log_filepath, 'r', encoding='utf-8') as f:
+                existing_logs = json.load(f)
+            if not isinstance(existing_logs, list):
+                existing_logs = [existing_logs]
+            existing_logs.append(log_data)
+            log_data = existing_logs
+        except:
+            # 파일이 손상되었으면 새로 시작
+            log_data = [log_data]
+    else:
+        log_data = [log_data]
+    
+    # 디렉토리가 없으면 생성
+    os.makedirs(os.path.dirname(log_filepath) if os.path.dirname(log_filepath) else '.', exist_ok=True)
+    
+    # 로그 파일에 저장
+    with open(log_filepath, 'w', encoding='utf-8') as f:
+        json.dump(log_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"  📝 Optuna 최적화 로그 저장: {log_filepath}")

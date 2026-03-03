@@ -45,6 +45,12 @@ class BaseModel:
         self.random_state = random_state
         self.model = None
         self.feature_importance_ = None
+        # sklearn 호환을 위한 estimator 타입 설정 (permutation_importance 등에서 사용)
+        # 분류 문제에서는 classifier, 회귀 문제에서는 regressor로 인식되도록 지정
+        if self.task_type == 'classification':
+            self._estimator_type = 'classifier'
+        else:
+            self._estimator_type = 'regressor'
 
     def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
         raise NotImplementedError
@@ -101,6 +107,8 @@ class CatBoostModel(BaseModel):
             fit_kw['eval_set'] = (X_val, y_val)
         self.model.fit(X_train, y_train, **fit_kw)
         self.feature_importance_ = self.model.feature_importances_
+        if self.task_type == 'classification':
+            self.classes_ = np.unique(y_train)
         return self
 
     def predict(self, X):
@@ -112,7 +120,10 @@ class CatBoostModel(BaseModel):
         if self.model is None:
             raise ValueError("Model must be fitted before prediction")
         if self.task_type == 'classification':
-            return self.model.predict_proba(X)[:, 1]
+            proba = self.model.predict_proba(X)
+            if proba.ndim == 1:
+                proba = np.column_stack([1 - proba, proba])
+            return proba
         return self.model.predict(X)
 
 
@@ -149,6 +160,8 @@ class LightGBMModel(BaseModel):
             valid.append(lgb.Dataset(X_val, label=y_val, reference=train_data))
         self.model = lgb.train(fit_params, train_data, valid_sets=valid, valid_names=['train', 'val'][:len(valid)], **kwargs)
         self.feature_importance_ = self.model.feature_importance(importance_type='gain')
+        if self.task_type == 'classification':
+            self.classes_ = np.unique(y_train)
         return self
 
     def predict(self, X):
@@ -157,7 +170,10 @@ class LightGBMModel(BaseModel):
         return self.model.predict(X)
 
     def predict_proba(self, X):
-        """LightGBM binary는 predict()가 이미 확률 반환."""
+        """LightGBM binary는 predict()가 이미 확률 반환. sklearn 호환 (n_samples, 2) 형태로 반환."""
+        if self.task_type == 'classification':
+            p1 = self.predict(X)
+            return np.column_stack([1 - p1, p1])
         return self.predict(X)
 
 
@@ -197,6 +213,8 @@ class XGBoostModel(BaseModel):
             else:
                 raise
         self.feature_importance_ = np.array(list(self.model.get_score(importance_type='gain').values()))
+        if self.task_type == 'classification':
+            self.classes_ = np.unique(y_train)
         return self
 
     def predict(self, X):
@@ -205,7 +223,10 @@ class XGBoostModel(BaseModel):
         return self.model.predict(xgb.DMatrix(X))
 
     def predict_proba(self, X):
-        """XGBoost binary:logistic은 predict()가 이미 확률 반환."""
+        """XGBoost binary:logistic은 predict()가 이미 확률 반환. sklearn 호환 (n_samples, 2) 형태로 반환."""
+        if self.task_type == 'classification':
+            p1 = self.predict(X)
+            return np.column_stack([1 - p1, p1])
         return self.predict(X)
 
 
@@ -219,14 +240,17 @@ def _compute_score(y_true, y_pred, task_type: str, metric: str):
         if metric == 'r2':
             return r2_score(y_true, y_pred), "R2"
         return np.sqrt(mean_squared_error(y_true, y_pred)), "RMSE"
-    # classification
+    # classification: predict_proba가 (n_samples, 2)일 수 있음 → 양성 클래스 확률만 사용
+    y_prob = np.asarray(y_pred)
+    if y_prob.ndim == 2:
+        y_prob = y_prob[:, 1]
     if metric in ('auto', 'auc'):
-        return roc_auc_score(y_true, y_pred), "AUC"
+        return roc_auc_score(y_true, y_prob), "AUC"
     if metric == 'logloss':
-        return log_loss(y_true, y_pred), "LogLoss"
+        return log_loss(y_true, y_prob), "LogLoss"
     if metric == 'accuracy':
-        return accuracy_score(y_true, (np.asarray(y_pred) > 0.5).astype(int)), "Accuracy"
-    return roc_auc_score(y_true, y_pred), "AUC"
+        return accuracy_score(y_true, (y_prob > 0.5).astype(int)), "Accuracy"
+    return roc_auc_score(y_true, y_prob), "AUC"
 
 
 class ModelTrainer:
@@ -263,7 +287,14 @@ class ModelTrainer:
         """평가/제출용: scoring_metric에 따라 회귀=예측값, 분류=확률 또는 라벨."""
         if self.task_type == 'regression':
             return model.predict(X)
-        return model.predict_proba(X) if self._use_probability() else model.predict(X)
+        if self._use_probability():
+            proba = model.predict_proba(X)
+            proba = np.asarray(proba)
+            # OOF/앙상블에서는 양성 클래스 확률(1D)만 사용
+            if proba.ndim == 2:
+                return proba[:, 1]
+            return proba
+        return model.predict(X)
 
     def _score(self, y_true, y_pred):
         """설정된 scoring_metric으로 (score, metric_name) 반환."""
@@ -294,6 +325,7 @@ class ModelTrainer:
     
     def train_with_cv(self, X, y, model_type: str, n_folds: int = 5,
                       cat_features: Optional[List] = None, **model_params):
+        
         """K-Fold CV로 학습 후 OOF 예측·CV 점수 반환."""
         kf = (StratifiedKFold if self.task_type == 'classification' else KFold)(
             n_splits=n_folds, shuffle=True, random_state=self.random_state
@@ -384,19 +416,30 @@ class ModelTrainer:
         """Fold별 permutation importance 계산 후 평균 반환. scoring 미지정 시 scoring_metric과 동일하게 선택."""
         if model_type not in self.models:
             raise ValueError(f"Model {model_type} not found. Train the model first.")
-        feature_names = feature_names or X.columns.tolist()
+        # XGBoost DMatrix는 int/float/bool/category만 허용. object 컬럼이 있으면 수치형만 사용
+        numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+        if len(numeric_cols) == 0:
+            return pd.DataFrame()
+        X_perm = X[numeric_cols].copy()
+        feature_names = feature_names or numeric_cols
+        if len(feature_names) != len(numeric_cols):
+            feature_names = numeric_cols
         models = self.models[model_type]
         scoring = scoring or self._default_sklearn_scoring()
         rs = random_state if random_state is not None else self.random_state
         fold_importances = []
-
-        print(f"\n📊 {model_type.upper()} Permutation Importance (n_repeats={n_repeats}, folds={len(models)})")
+        n_object = X.shape[1] - len(numeric_cols)
+        print(f"\n📊 {model_type.upper()} Permutation Importance (n_repeats={n_repeats}, folds={len(models)})", end="")
+        if n_object > 0:
+            print(f" — object 컬럼 {n_object}개 제외, 수치형 {len(numeric_cols)}개만 사용")
+        else:
+            print()
         for fold_idx, model in enumerate(models, 1):
             print(f"   Fold {fold_idx}/{len(models)} 처리 중...", end='\r')
             try:
                 if not hasattr(model, 'predict'):
                     continue
-                perm = permutation_importance(model, X, y, n_repeats=n_repeats, random_state=rs, scoring=scoring, n_jobs=n_jobs)
+                perm = permutation_importance(model, X_perm, y, n_repeats=n_repeats, random_state=rs, scoring=scoring, n_jobs=n_jobs)
                 imp = perm.importances_mean
                 if scoring.startswith('neg_'):
                     imp = -imp
@@ -417,96 +460,203 @@ class ModelTrainer:
 
 
 class EnsembleModel:
-    """OOF 예측에 대한 가중 평균/단순 평균/스태킹(가중치 최적화) 앙상블. scoring_metric에 따라 평가 지표 통일."""
+    """OOF 예측에 대한 가중 평균/단순 평균/Ridge 메타모델 앙상블. scoring_metric에 따라 평가 지표 통일."""
 
     def __init__(self, task_type: str = 'regression', scoring_metric: Optional[str] = None):
         self.task_type = task_type
         self.scoring_metric = (scoring_metric or 'auto').lower()
         self.weights = None
         self.ensemble_score = None
-
-    def _ensemble_score(self, y_true: np.ndarray, ensemble_pred: np.ndarray) -> float:
-        """설정된 지표로 앙상블 점수 계산 (최소화 방향: RMSE/LogLoss는 그대로, AUC/Accuracy/R2는 음수)."""
-        s, _ = _compute_score(y_true, ensemble_pred, self.task_type, self.scoring_metric)
-        if self.scoring_metric in ('r2', 'auc', 'accuracy'):
-            return -s
-        return s
+        self.method = None
+        self.meta_model = None
+        self.model_names = None
 
     def fit(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray,
-            method: str = 'weighted_average', optimize: bool = True):
+            method: str = 'weighted_average', optimize: bool = True, ridge_alpha: float = 1.0):
+        """앙상블 모델 학습. method: 'simple_average' | 'weighted_average' | 'ridge_meta'."""
+        if not predictions_dict:
+            raise ValueError("predictions_dict가 비어있습니다.")
+        
+        first_pred = list(predictions_dict.values())[0]
+        for name, pred in predictions_dict.items():
+            if len(pred) != len(first_pred):
+                raise ValueError(f"{name}의 예측값 길이가 일치하지 않습니다: {len(pred)} != {len(first_pred)}")
+            if len(pred) != len(y_true):
+                raise ValueError(f"{name}의 예측값과 y_true의 길이가 일치하지 않습니다: {len(pred)} != {len(y_true)}")
+        
         self.method = method
         
         if method == 'simple_average':
-            self.weights = {name: 1.0 / len(predictions_dict) for name in predictions_dict.keys()}
+            n_models = len(predictions_dict)
+            self.weights = {name: 1.0 / n_models for name in predictions_dict.keys()}
+            print(f"\n📊 단순 평균 앙상블 (가중치: 각 {1.0/n_models:.4f})")
         
         elif method == 'weighted_average':
             if optimize:
                 self.weights = self._optimize_weights(predictions_dict, y_true)
             else:
-                self.weights = {name: 1.0 / len(predictions_dict) for name in predictions_dict.keys()}
+                n_models = len(predictions_dict)
+                self.weights = {name: 1.0 / n_models for name in predictions_dict.keys()}
+                print(f"\n📊 가중 평균 앙상블 (최적화 없음, 가중치: 각 {1.0/n_models:.4f})")
+            weight_sum = sum(self.weights.values())
+            if abs(weight_sum - 1.0) > 1e-6:
+                self.weights = {name: w / weight_sum for name, w in self.weights.items()}
         
-        elif method == 'stacking':
-            self.weights = self._optimize_weights(predictions_dict, y_true)
-        
+        elif method == 'ridge_meta':
+            self._fit_ridge_meta(predictions_dict, y_true, ridge_alpha)
         else:
-            raise ValueError(f"Unknown method: {method}")
+            raise ValueError(f"Unknown method: {method}. 'simple_average' | 'weighted_average' | 'ridge_meta' 지원.")
         
-        ensemble_pred = np.zeros_like(list(predictions_dict.values())[0])
-        for name, pred in predictions_dict.items():
-            if self.weights and name in self.weights:
-                ensemble_pred += self.weights[name] * pred
+        if self.meta_model is None:
+            ensemble_pred = self._compute_ensemble_prediction(predictions_dict)
+        else:
+            model_names = sorted(predictions_dict.keys())
+            X_meta = np.column_stack([predictions_dict[n] for n in model_names])
+            ensemble_pred = self.meta_model.predict(X_meta)
+            if self.task_type == 'classification':
+                ensemble_pred = np.clip(ensemble_pred, 0.0, 1.0)
         
-        self.ensemble_score, _ = _compute_score(y_true, ensemble_pred, self.task_type, self.scoring_metric)
+        self.ensemble_score, metric_name = _compute_score(y_true, ensemble_pred, self.task_type, self.scoring_metric)
+        print(f"\n✅ 앙상블 학습 완료!")
+        print(f"  평가 지표 ({metric_name}): {self.ensemble_score:.6f}")
+    
+    def _fit_ridge_meta(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray, alpha: float):
+        """OOF 예측을 입력으로 Ridge 메타모델 학습. 분류 시 예측은 0~1로 clip."""
+        from sklearn.linear_model import Ridge
+        self.model_names = sorted(predictions_dict.keys())
+        X_meta = np.column_stack([predictions_dict[n] for n in self.model_names])
+        self.meta_model = Ridge(alpha=alpha).fit(X_meta, y_true)
+        self.weights = {n: float(self.meta_model.coef_[i]) for i, n in enumerate(self.model_names)}
+        print(f"\n📊 Ridge 메타모델 앙상블 (alpha={alpha})")
+        for n in self.model_names:
+            print(f"  {n:15s} 계수: {self.weights[n]:.6f}")
+        print(f"  절편: {self.meta_model.intercept_:.6f}")
     
     def _optimize_weights(self, predictions_dict: Dict[str, np.ndarray], 
                          y_true: np.ndarray) -> Dict[str, float]:
-        """가중치 최적화 (scipy.optimize 사용). 목적은 항상 최소화."""
+        """가중치 최적화 (scipy.optimize 사용). 실패 시 모델별 OOF 점수로 비례 가중치 적용."""
         from scipy.optimize import minimize
         
         model_names = list(predictions_dict.keys())
+        n_models = len(model_names)
         predictions_list = [predictions_dict[name] for name in model_names]
         
         def objective(weights):
+            """최적화 목적 함수: 앙상블 예측의 점수를 최소화"""
+            weight_sum = np.sum(weights)
+            if weight_sum < 1e-10:
+                return 1e10
+            normalized_weights = weights / weight_sum
             weighted_pred = np.zeros_like(predictions_list[0])
-            for pred, weight in zip(predictions_list, weights):
+            for pred, weight in zip(predictions_list, normalized_weights):
                 weighted_pred += weight * pred
-            return self._ensemble_score(y_true, weighted_pred)
+            if self.task_type == 'regression':
+                score, _ = _compute_score(y_true, weighted_pred, self.task_type, self.scoring_metric)
+                return score
+            else:
+                score, _ = _compute_score(y_true, weighted_pred, self.task_type, self.scoring_metric)
+                if self.scoring_metric in ('auto', 'auc', 'accuracy'):
+                    return -score
+                return score
         
-        # 제약 조건: 가중치 합 = 1, 모든 가중치 >= 0
-        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
-        bounds = [(0.33, 1) for _ in range(len(model_names))]
+        # 제약: 가중치 합 = 1, 각 가중치 >= 0.05 (성능 차이 반영 가능하도록 완화)
+        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0}
+        min_weight = 0.05
+        bounds = [(min_weight, 1.0) for _ in range(n_models)]
+        if n_models * min_weight > 1.0:
+            min_weight = 1.0 / n_models
+            bounds = [(min_weight, 1.0) for _ in range(n_models)]
         
-        # 초기값: 동일 가중치
-        initial_weights = np.array([1.0 / len(model_names)] * len(model_names))
+        initial_weights = np.array([1.0 / n_models] * n_models)
+        optimized_weights = None
         
-        # 최적화
-        result = minimize(
-            objective,
-            initial_weights,
-            method='SLSQP',
-            bounds=bounds,
-            constraints=constraints
-        )
+        try:
+            result = minimize(
+                objective,
+                initial_weights,
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints,
+                options={'maxiter': 1000, 'ftol': 1e-9, 'disp': False}
+            )
+            if result.success:
+                optimized_weights = result.x
+            else:
+                print(f"⚠️ 가중치 최적화 실패 (SLSQP): {result.message}")
+                optimized_weights = self._weights_by_performance(
+                    predictions_dict, y_true, model_names, n_models, initial_weights
+                )
+        except Exception as e:
+            print(f"⚠️ 가중치 최적화 중 오류: {e}")
+            optimized_weights = self._weights_by_performance(
+                predictions_dict, y_true, model_names, n_models, initial_weights
+            )
         
-        weights_dict = {name: weight for name, weight in zip(model_names, result.x)}
+        if optimized_weights is None:
+            optimized_weights = initial_weights
+        weight_sum = np.sum(optimized_weights)
+        if weight_sum < 1e-10:
+            optimized_weights = initial_weights
+        else:
+            optimized_weights = optimized_weights / weight_sum
         
+        weights_dict = {name: float(w) for name, w in zip(model_names, optimized_weights)}
         print(f"\n📊 최적화된 가중치:")
-        for name, weight in weights_dict.items():
-            print(f"  {name}: {weight:.4f}")
-        
+        for name, weight in sorted(weights_dict.items()):
+            print(f"  {name:15s}: {weight:.6f} ({weight*100:.2f}%)")
+        print(f"  가중치 합: {sum(weights_dict.values()):.6f}")
         return weights_dict
     
-    def predict(self, predictions_dict: Dict[str, np.ndarray]) -> np.ndarray:
-        """저장된 가중치로 앙상블 예측 반환."""
+    def _weights_by_performance(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray,
+                                 model_names: list, n_models: int,
+                                 fallback_weights: np.ndarray) -> np.ndarray:
+        """SLSQP 실패 시 모델별 OOF 점수에 비례한 가중치 계산 (성능 좋은 모델에 더 높은 비중)."""
+        scores = []
+        for name in model_names:
+            pred = predictions_dict[name]
+            score, _ = _compute_score(y_true, pred, self.task_type, self.scoring_metric)
+            if self.task_type == 'regression':
+                score = -score  # RMSE/MAE는 낮을수록 좋음
+            elif self.scoring_metric not in ('auto', 'auc', 'accuracy'):
+                score = -score  # logloss 등
+            scores.append(score)
+        scores = np.array(scores, dtype=float)
+        min_s = scores.min()
+        shifted = scores - min_s + 1e-8
+        if shifted.sum() < 1e-10:
+            return fallback_weights
+        weights = shifted / shifted.sum()
+        weights = np.clip(weights, 0.05, 1.0)
+        weights = weights / weights.sum()
+        print(f"  → 모델별 OOF 점수에 비례한 가중치 적용 (성능 차이 반영)")
+        return weights
+    
+    def _compute_ensemble_prediction(self, predictions_dict: Dict[str, np.ndarray]) -> np.ndarray:
+        """가중치를 사용하여 앙상블 예측 계산"""
         if self.weights is None:
-            raise ValueError("Ensemble model must be fitted first")
+            raise ValueError("앙상블 모델이 학습되지 않았습니다. fit()을 먼저 호출하세요.")
         
         ensemble_pred = np.zeros_like(list(predictions_dict.values())[0])
         
         for name, pred in predictions_dict.items():
+            if name not in self.weights:
+                print(f"⚠️ {name}의 가중치가 없습니다. 건너뜁니다.")
+                continue
             ensemble_pred += self.weights[name] * pred
         
         return ensemble_pred
+    
+    def predict(self, predictions_dict: Dict[str, np.ndarray]) -> np.ndarray:
+        """저장된 가중치 또는 Ridge 메타모델로 앙상블 예측 반환"""
+        if self.meta_model is not None and self.model_names is not None:
+            X_meta = np.column_stack([predictions_dict[n] for n in self.model_names])
+            pred = self.meta_model.predict(X_meta)
+            if self.task_type == 'classification':
+                pred = np.clip(pred, 0.0, 1.0)
+            return pred
+        if self.weights is None:
+            raise ValueError("앙상블 모델이 학습되지 않았습니다. fit()을 먼저 호출하세요.")
+        return self._compute_ensemble_prediction(predictions_dict)
 
 
 def evaluate_model(y_true, y_pred, task_type: str = 'regression'):

@@ -7,7 +7,8 @@ from .hyperparameter import (
     HyperparameterOptimizer,
     save_hyperparameters,
     load_hyperparameters,
-    optimize_hyperparameters
+    optimize_hyperparameters,
+    optimize_ridge_alpha,
 )
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     'save_hyperparameters',
     'load_hyperparameters',
     'optimize_hyperparameters',
+    'optimize_ridge_alpha',
 ]
 
