@@ -28,7 +28,7 @@ USE_FEATURE_ENGINEERING_FOR_MODELS = {
 }
 
 # ========== 앙상블 설정 ==========
-ENSEMBLE_METHOD = 'ridge_meta'  # 'weighted_average' | 'simple_average' | 'ridge_meta'
+ENSEMBLE_METHOD = 'weighted_average'  # 'weighted_average' | 'simple_average' | 'ridge_meta'
 RIDGE_ALPHA = 1.0  # ridge_meta 사용 시 Ridge 정규화 강도 (Optuna 미사용 시 적용)
 OPTUNA_RIDGE_ALPHA = True  # True면 Ridge alpha를 Optuna로 최적화
 RIDGE_ALPHA_N_TRIALS = 20  # Ridge alpha Optuna 시도 횟수
@@ -37,7 +37,7 @@ RIDGE_ALPHA_N_TRIALS = 20  # Ridge alpha Optuna 시도 횟수
 USE_OPTUNA = False  # True로 설정하면 Optuna 최적화 실행 (시간이 오래 걸림)
 N_TRIALS = 50  # Optuna 시도 횟수
 OPTUNA_SAMPLE_SIZE = None  # 예: 50000 (5만 개만 사용)
-USE_SAVED_PARAMS = False  # None으로 설정하면 자동 감지
+USE_SAVED_PARAMS = True  # None으로 설정하면 자동 감지
 USE_PERMUTATION_IMPORTANCE = False  # True로 설정하면 Permutation Importance 분석 실행
 
 # ========== 파일 경로 ==========
@@ -61,7 +61,7 @@ ENCODING_CONFIG = {
         'category_orders': {
             '': ['No', 'Yes'],
             '': ['No', 'Yes'],
-            '': ['No', 'Yes'],
+            '': ['Month-to-month', 'One Year', 'Two Year'],
         }
     },
     'drop_original': False

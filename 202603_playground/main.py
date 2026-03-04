@@ -329,7 +329,7 @@ def main():
         df_for_vis[TARGET_COL] = y_train.values
     else:
         df_for_vis[TARGET_COL] = y_train
-    # run_eda_visualization(df_for_vis, target_col=TARGET_COL)
+    run_eda_visualization(df_for_vis, target_col=TARGET_COL)
     
     # 모델 학습
     print("\n🚀 모델 학습 시작...")
