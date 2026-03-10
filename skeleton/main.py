@@ -4,11 +4,11 @@ EDA는 run_eda.py로 별도 실행. run_eda=True 시 main에서도 호출 가능
 """
 
 from pathlib import Path
+import json
 
 from data_loader import load_all
 from prepare_data import prepare_data, get_feature_columns
-from modeling import train_model, predict, evaluate
-
+from modeling import run_ensemble_models
 
 def main(
     data_dir: str | Path = "data",
@@ -26,25 +26,27 @@ def main(
     train_prepared = prepare_data(train_df, target_col=target_col)
     test_prepared = prepare_data(test_df, target_col=target_col)
     feature_cols = get_feature_columns(train_prepared, target_col=target_col, id_col=id_col)
-
-    
-    # 4. modeling (모델 주입 시 학습/예측/평가)
+    # 학습/평가/예측용 데이터
     X = train_prepared[feature_cols]
     y = train_prepared[target_col]
-
-    model = train_model(X, y, model=None)
-
-    y_pred = predict(model, X)
-    score = evaluate(y, y_pred)
-    print(f"Train score: {score}")
-
     X_test = test_prepared[feature_cols]
-    test_pred = predict(model, X_test)
-    submission_df["target"] = test_pred
-    submission_df.to_csv("submission.csv", index=False)
 
-    return train_prepared, test_prepared
+    # Optuna에서 저장한 하이퍼파라미터 로드 (키: catboost, lightgbm, xgboost)
+    with open("best_hyperparameters.json", "r", encoding="utf-8") as f:
+        best = json.load(f)
+    model_types = ["catboost", "lightgbm", "xgboost"]
 
+    # 4. modeling: 모델별 학습 + 테스트 예측 앙상블
+    ensemble_pred = run_ensemble_models(
+        X=X,
+        y=y,
+        X_test=X_test,
+        best_params_dict=best,
+        model_types=model_types,
+        weights=None,
+    )
+    submission_df[target_col] = ensemble_pred
+    submission_df.to_csv("submission_ensemble.csv", index=False)
 
 if __name__ == "__main__":
-    main(data_dir="data", target_col="target", id_col="id")
+    main(data_dir="data", target_col="Churn", id_col="id")

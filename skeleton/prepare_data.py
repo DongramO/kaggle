@@ -15,16 +15,19 @@ def prepare_data(df: pd.DataFrame, target_col: str | None = None) -> pd.DataFram
     - 필요 시 타입 변환
     """
     df_cp = df.copy()
+    drop_cols = ['id']
+    for col in drop_cols:
+        df_cp = df_cp.drop(columns=[col])
 
     numeric_cols = df_cp.select_dtypes(include=['int64', 'float64']).columns.tolist()
     categorical_cols = df_cp.select_dtypes(include=['object', 'category']).columns.tolist()
-
+    
+        
     print('numeric_cols: ', numeric_cols)
     print('categorical_cols: ', categorical_cols)
     print('--------------------------------')
     
     for col in numeric_cols:
-
         # numeric_col에 대한 결측치 처리
         df_cp[col] = df_cp[col].fillna(df_cp[col].median())
         
@@ -35,14 +38,12 @@ def prepare_data(df: pd.DataFrame, target_col: str | None = None) -> pd.DataFram
 
 
     for col in categorical_cols:
-
         # categorical_col에 대한 결측치 처리 (나중에 다시 확인하기)
         df_cp[col] = df_cp[col].fillna(df_cp[col].mode().iloc[0] if len(df_cp[col].mode()) else "")
 
 
     # encoding 관련 작업 진행 (target_col 제외한 범주형 컬럼)
     encode_cols = [c for c in categorical_cols if c != target_col] if target_col else categorical_cols
-
     df_cp = one_hot_encoding(df_cp, target_cols=[])
     df_cp = ordinal_encoding(df_cp, target_cols=[])
     df_cp = label_encoding(df_cp, target_cols=encode_cols)
@@ -50,7 +51,6 @@ def prepare_data(df: pd.DataFrame, target_col: str | None = None) -> pd.DataFram
 
     
     # feature_engineeering 작업 진행
-
     df_cp = feature_engineering(df_cp)
 
 
@@ -67,8 +67,6 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     eps = 1e-6
 
     X = df.copy()
-
-
     return X
 
 
@@ -101,14 +99,22 @@ def label_encoding(df: pd.DataFrame, target_cols: list[str] | None = None) -> pd
 
     for col in target_cols:
         le = LabelEncoder()
-        X[col] = le.fit_transform(X[col].astype(str).fillna("__NA__"))
-    
+        X[col] = le.fit_transform(X[col].astype(str).fillna("__NA__"))   
     return X
 
 
 def target_encoding(df: pd.DataFrame, target_cols: list[str] | None = None, target_col: str | None = None) -> pd.DataFrame:
-    """범주형 컬럼을 타겟 평균으로 인코딩."""
+    """범주형 컬럼을 타겟 평균으로 인코딩. target_col이 없으면(테스트 등) 그대로 반환."""
     X = df.copy()
+
+    # 테스트 데이터 등 target_col이 없으면 타겟 관련 로직 스킵
+    if target_col and target_col not in X.columns:
+        return X
+
+    if target_col and target_col in X.columns:
+        if X[target_col].dtype in ("object", "category") or (hasattr(X[target_col].dtype, "name") and X[target_col].dtype.name == "category"):
+            s = X[target_col].astype(str).str.strip().str.lower()
+            X[target_col] = s.map({"yes": 1, "no": 0})
 
     y = X[target_col]
     global_mean = y.mean()
@@ -118,5 +124,5 @@ def target_encoding(df: pd.DataFrame, target_cols: list[str] | None = None, targ
         stats = X.groupby(col)[target_col].agg(["count", "mean"])
         smooth = (stats["count"] * stats["mean"] + smoothing * global_mean) / (stats["count"] + smoothing)
         X[col] = X[col].map(smooth).fillna(global_mean)
-    
+
     return X

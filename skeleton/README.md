@@ -1,28 +1,38 @@
 # skeleton
 
-기존 common/playground와 **연결하지 않는** 독립적인 4단계 코드 구조.
+데이터 로드 → 전처리 → Optuna 튜닝 → K-Fold + 앙상블 → 제출까지 한 디렉토리 안에서 처리합니다.
 
 ## 구성
 
 | 파일 | 역할 |
 |------|------|
-| `data_loader.py` | train / test / sample_submission 로드 |
-| `prepare_data.py` | 결측 처리, 기본 전처리, 특성 컬럼 목록 |
-| `eda.py` | 요약 통계, 결측 리포트, EDA 실행 |
-| `run_eda.py` | EDA 독립 실행 진입점 (`python run_eda.py`) |
-| `modeling.py` | 학습 / 예측 / 평가 진입점 |
-| `main.py` | 전체 파이프라인 (EDA는 기본 미포함) |
+| `data_loader.py` | `train.csv`, `test.csv`, `sample_submission.csv` 로드 (`load_all`) |
+| `prepare_data.py` | 결측·클리핑·인코딩·간단 FE, `get_feature_columns` 제공 |
+| `eda.py` / `run_eda.py` | 필요 시 EDA 전용 실행(메인 파이프라인과 분리) |
+| `optuna.py` | LightGBM / CatBoost / XGBoost Optuna 튜닝 → `best_hyperparameters.json` 생성·갱신 |
+| `modeling.py` | 모델 생성(`train_model`), 평가(`evaluate`), K-Fold 앙상블(`run_ensemble_models`) |
+| `main.py` | 최종 학습·예측·앙상블·`submission_ensemble.csv` 생성 진입점 |
+| `best_hyperparameters.json` | 모델별 최적 하이퍼파라미터 + GPU/로그 옵션 저장 |
 
-## 사용 흐름
+## 동작 흐름
 
-1. **data_loader** → 원시 데이터 로드  
-2. **prepare_data** → 전처리 후 feature/target 분리  
-3. **eda** → 탐색 분석 (별도 실행 또는 main에서 선택 호출)  
-4. **modeling** → 학습 → 예측 → 평가 → 제출 파일 생성  
+1. **Optuna 튜닝 (선행 작업)**  
+   - `python optuna.py`  
+   - LightGBM / CatBoost / XGBoost를 각각 `N_FOLDS` K-Fold AUC 기준으로 최적화  
+   - 결과를 `best_hyperparameters.json`에 `{모델이름: 파라미터 딕셔너리}` 형식으로 저장
 
-## 실행 방법
+2. **메인 파이프라인 (`python main.py`)**  
+   - `data_loader.load_all`로 train/test/submission 로드  
+   - `prepare_data.prepare_data`로 전처리, `get_feature_columns`로 feature 목록 결정  
+   - `best_hyperparameters.json`을 읽어 모델별 하이퍼파라미터 로드  
+   - `modeling.run_ensemble_models`에서  
+     - StratifiedKFold(기본 5-fold)로 각 모델 OOF AUC 계산  
+     - `weights=None` 이므로 **OOF AUC 비율로 자동 가중치** 생성  
+     - 모델별 테스트 예측을 가중 평균해 앙상블 확률 산출  
+   - 최종 예측을 `submission_ensemble.csv`에 저장 (컬럼 이름: `target_col`, 예: `Churn`)
 
-- **전체 파이프라인**: `python main.py` (EDA 미포함)
-- **EDA만 실행**: `python run_eda.py`
-- **main에서 EDA 포함 실행**: `main(run_eda=True)` 호출  
+## 실행 요약
 
+- **하이퍼파라미터 탐색**: `python optuna.py`  
+- **학습 + 앙상블 + 제출 생성**: `python main.py`  
+- (옵션) **EDA 전용 실행**: `python run_eda.py` (EDA 코드 작성 후 사용)

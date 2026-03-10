@@ -66,23 +66,99 @@ def create_objective_lgbm(X, y):
     return objective
 
 
-def run_optuna():
-    """Optuna 최적화 실행 및 결과 저장."""
+def create_objective_catboost(X, y):
+    """CatBoost용 Optuna objective 함수."""
+
+    def objective(trial):
+        from catboost import CatBoostClassifier
+
+        params = {
+            "iterations": trial.suggest_int("iterations", 100, 1000),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "depth": trial.suggest_int("depth", 3, 10),
+            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-2, 10.0, log=True),
+            "random_strength": trial.suggest_float("random_strength", 1e-3, 10.0, log=True),
+            "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 100),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "random_state": RANDOM_STATE,
+            "verbose": 0,
+        }
+
+        model = CatBoostClassifier(**params)
+        scores = cross_val_score(model, X, y, cv=N_FOLDS, scoring="roc_auc", n_jobs=-1)
+        return scores.mean()
+
+    return objective
+
+
+def create_objective_xgb(X, y):
+    """XGBoost용 Optuna objective 함수."""
+
+    def objective(trial):
+        import xgboost as xgb
+
+        params = {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 500),
+            "max_depth": trial.suggest_int("max_depth", 3, 12),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "gamma": trial.suggest_float("gamma", 1e-6, 5.0, log=True),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "random_state": RANDOM_STATE,
+            "verbosity": 0,
+        }
+
+        model = xgb.XGBClassifier(**params)
+        scores = cross_val_score(model, X, y, cv=N_FOLDS, scoring="roc_auc", n_jobs=-1)
+        return scores.mean()
+
+    return objective
+
+
+# 모델별 Optuna objective 및 저장 시 추가할 고정 옵션(GPU/로그)
+OBJECTIVES = {
+    "lightgbm": (create_objective_lgbm, {"verbosity": -1, "device": "gpu"}),
+    "catboost": (create_objective_catboost, {"verbose": 0, "task_type": "GPU"}),
+    "xgboost": (create_objective_xgb, {"verbosity": 0, "tree_method": "hist", "device": "cuda"}),
+}
+
+
+def run_optuna(model_types=None):
+    """Optuna 최적화 실행 및 결과 저장. model_types 미지정 시 lightgbm, catboost, xgboost 모두 실행."""
+    if model_types is None:
+        model_types = ["lightgbm", "catboost", "xgboost"]
+
     print("데이터 로드 중...")
     X, y = _get_data()
     print(f"X: {X.shape}, y: {y.shape}")
 
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE, n_startup_trials=5))
-    study.optimize(create_objective_lgbm(X, y), n_trials=N_TRIALS, show_progress_bar=True)
+    # 기존 JSON 로드(다른 모델 키 보존)
+    if OUTPUT_PATH.exists():
+        with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+            all_params = json.load(f)
+    else:
+        all_params = {}
 
-    best_params = study.best_params
-    best_value = study.best_value
-    print(f"\nBest AUC: {best_value:.4f}")
-    print("Best params:", best_params)
+    for model_type in model_types:
+
+        obj_fn, extra = OBJECTIVES[model_type]
+        print(f"\n=== {model_type} Optuna 시작 (n_trials={N_TRIALS}) ===")
+        study = optuna.create_study(
+            direction="maximize",
+            sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE, n_startup_trials=5),
+        )
+        study.optimize(obj_fn(X, y), n_trials=N_TRIALS, show_progress_bar=True)
+        best = dict(study.best_params)
+        best.update(extra)
+        all_params[model_type] = best
+        print(f"{model_type} Best AUC: {study.best_value:.4f}")
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump({"best_value": best_value, "best_params": best_params}, f, indent=2, ensure_ascii=False)
-    print(f"저장: {OUTPUT_PATH}")
+        json.dump(all_params, f, indent=2, ensure_ascii=False)
+    print(f"\n저장: {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
