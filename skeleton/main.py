@@ -1,17 +1,22 @@
 """
-skeleton 메인: data_loader → prepare_data → eda → modeling 순서로 각 모듈 참조.
+skeleton 메인: data_loader → prepare_data → modeling 순서로 각 모듈 참조.
+EDA는 run_eda.py로 별도 실행. run_eda=True 시 main에서도 호출 가능.
 """
 
 from pathlib import Path
 
 from data_loader import load_all
 from prepare_data import prepare_data, get_feature_columns
-from eda import run_eda, summary, missing_report
 from modeling import train_model, predict, evaluate
 
 
-def main(data_dir: str | Path = "data", target_col: str | None = None, id_col: str | None = "id"):
-    """전체 파이프라인: 로드 → 전처리 → EDA → 모델링."""
+def main(
+    data_dir: str | Path = "data",
+    target_col: str | None = None,
+    id_col: str | None = "id",
+    run_eda: bool = False,
+):
+    """전체 파이프라인: 로드 → 전처리 → (선택) EDA → 모델링."""
     data_dir = Path(data_dir)
 
     # 1. data_loader
@@ -22,9 +27,7 @@ def main(data_dir: str | Path = "data", target_col: str | None = None, id_col: s
     test_prepared = prepare_data(test_df, target_col=target_col)
     feature_cols = get_feature_columns(train_prepared, target_col=target_col, id_col=id_col)
 
-    # 3. eda (선택)
-    eda_result = run_eda(train_prepared, target_col=target_col)
-
+    
     # 4. modeling (모델 주입 시 학습/예측/평가)
     X = train_prepared[feature_cols]
     y = train_prepared[target_col]
@@ -40,7 +43,7 @@ def main(data_dir: str | Path = "data", target_col: str | None = None, id_col: s
     submission_df["target"] = test_pred
     submission_df.to_csv("submission.csv", index=False)
 
-    return train_prepared, test_prepared, eda_result
+    return train_prepared, test_prepared
 
 
 if __name__ == "__main__":

@@ -13,3 +13,4 @@ description: 신규 프로젝트 구조 생성 가이드
 │   ├── modeling/             # 모델링
 │   ├── eda/                  # EDA
 │   └── utils/                # 유틸리티
+

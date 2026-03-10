@@ -25,13 +25,6 @@ RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
 
 
-def _encode_categorical(X):
-    """범주형 컬럼을 수치로 인코딩."""
-    out = X.copy()
-    for col in out.select_dtypes(include=["object", "category"]).columns:
-        le = LabelEncoder()
-        out[col] = le.fit_transform(out[col].astype(str).fillna("__NA__"))
-    return out
 
 
 def _get_data():
@@ -42,10 +35,6 @@ def _get_data():
 
     X = train_prepared[feature_cols]
     y = train_prepared[TARGET_COL]
-
-    X = _encode_categorical(X)
-    if y.dtype == "object" or y.dtype.name == "category":
-        y = LabelEncoder().fit_transform(y.astype(str))
 
     return X, y
 
