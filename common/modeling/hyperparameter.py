@@ -17,6 +17,9 @@ import xgboost as xgb
 from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error, roc_auc_score, log_loss
 from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.pipeline import Pipeline
 
 # 하이퍼파라미터 최적화
 try:
@@ -44,9 +47,9 @@ class HyperparameterOptimizer:
         self.use_gpu = use_gpu
         self.best_params = {}
         
-    def optimize_catboost(self, X_train, y_train, n_trials: int = 50, 
+    def optimize_catboost(self, X_train, y_train, n_trials: int = 50, n_folds: int = 5,
                          cat_features: Optional[List] = None, **kwargs):
-        """CatBoost 하이퍼파라미터 최적화"""
+        """CatBoost 하이퍼파라미터 최적화 (본학습과 동일한 n_folds 사용)."""
         def objective(trial):
             # bootstrap_type을 먼저 선택
             bootstrap_type = trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS'])
@@ -110,11 +113,11 @@ class HyperparameterOptimizer:
                 model = CatBoostClassifier(**params)
                 scoring = 'roc_auc'
             
-            # K-Fold 교차 검증 (Optuna 최적화 시 속도 개선을 위해 3-fold 사용)
+            # K-Fold 교차 검증 (본학습과 동일한 n_folds 사용)
             if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             else:
-                cv = KFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = KFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             
             # CatBoost 범주형 특성 처리
             # DataFrame인 경우 CatBoost가 자동으로 범주형을 감지하지만,
@@ -178,8 +181,8 @@ class HyperparameterOptimizer:
         
         return study.best_params
     
-    def optimize_lightgbm(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """LightGBM 하이퍼파라미터 최적화"""
+    def optimize_lightgbm(self, X_train, y_train, n_trials: int = 50, n_folds: int = 5, **kwargs):
+        """LightGBM 하이퍼파라미터 최적화 (본학습과 동일한 n_folds 사용)."""
         def objective(trial):
             if self.task_type == 'regression':
                 params = {
@@ -228,11 +231,11 @@ class HyperparameterOptimizer:
                 model = lgb.LGBMClassifier(**params)
                 scoring = 'roc_auc'
             
-            # K-Fold 교차 검증 (Optuna 최적화 시 속도 개선을 위해 3-fold 사용)
+            # K-Fold 교차 검증 (본학습과 동일한 n_folds 사용)
             if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             else:
-                cv = KFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = KFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             
             # n_jobs=1로 설정하여 Optuna와의 충돌 방지
             scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
@@ -270,17 +273,17 @@ class HyperparameterOptimizer:
         
         return study.best_params
     
-    def optimize_xgboost(self, X_train, y_train, n_trials: int = 50, **kwargs):
-        """XGBoost 하이퍼파라미터 최적화"""
+    def optimize_xgboost(self, X_train, y_train, n_trials: int = 50, n_folds: int = 5, **kwargs):
+        """XGBoost 하이퍼파라미터 최적화 (본학습과 동일한 n_folds 사용)."""
         def objective(trial):
             if self.task_type == 'regression':
                 params = {
                     'objective': 'reg:squarederror',
                     'eval_metric': 'rmse',
                     'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
+                    'max_depth': trial.suggest_int('max_depth', 3, 8),  # 12→8: 과적합 완화
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                    'min_child_weight': trial.suggest_int('min_child_weight', 5, 35),  # 1–10→5–35: 과적합 완화
                     'subsample': trial.suggest_float('subsample', 0.5, 1.0),
                     'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
                     'gamma': trial.suggest_float('gamma', 0, 1),
@@ -288,10 +291,7 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
-                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
-                    # Optuna 최적화 중에는 early stopping을 사용하지 않음
                 }
-                # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'xgboost'))
                 model = xgb.XGBRegressor(**params)
                 scoring = 'neg_mean_squared_error'
@@ -300,9 +300,9 @@ class HyperparameterOptimizer:
                     'objective': 'binary:logistic',
                     'eval_metric': 'logloss',
                     'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
-                    'max_depth': trial.suggest_int('max_depth', 3, 12),
+                    'max_depth': trial.suggest_int('max_depth', 3, 8),  # 12→8: 과적합 완화
                     'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                    'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                    'min_child_weight': trial.suggest_int('min_child_weight', 5, 35),  # 1–10→5–35: 과적합 완화
                     'subsample': trial.suggest_float('subsample', 0.5, 1.0),
                     'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
                     'gamma': trial.suggest_float('gamma', 0, 1),
@@ -310,19 +310,16 @@ class HyperparameterOptimizer:
                     'reg_lambda': trial.suggest_float('reg_lambda', 1e-3, 10.0, log=True),
                     'random_state': self.random_state,
                     'verbosity': 0,
-                    # early_stopping_rounds는 cross_val_score와 호환되지 않으므로 제거
-                    # Optuna 최적화 중에는 early stopping을 사용하지 않음
                 }
-                # GPU 설정 추가
                 params.update(setup_gpu_params(self.use_gpu, 'xgboost'))
                 model = xgb.XGBClassifier(**params)
                 scoring = 'roc_auc'
             
-            # K-Fold 교차 검증 (Optuna 최적화 시 속도 개선을 위해 3-fold 사용)
+            # K-Fold 교차 검증 (본학습과 동일한 n_folds 사용)
             if self.task_type == 'classification':
-                cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             else:
-                cv = KFold(n_splits=3, shuffle=True, random_state=self.random_state)  # 5 -> 3으로 축소
+                cv = KFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
             
             # n_jobs=1로 설정하여 Optuna와의 충돌 방지
             scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
@@ -347,7 +344,7 @@ class HyperparameterOptimizer:
                 print(f"  Trial {trial.number + 1}/{n_trials} 완료 | "
                       f"Best Score: {best_value:.6f} | Current Score: {current_str}")
         
-        print(f"  🔄 Optuna 최적화 시작 (총 {n_trials} trials)...")
+        print(f"  🔄 Optuna 최적화 시작 (총 {n_trials} trials, {n_folds}-Fold CV)...")
         study.optimize(objective, n_trials=n_trials, show_progress_bar=True, callbacks=[callback])
         
         best_value = study.best_value or float('inf')
@@ -360,9 +357,70 @@ class HyperparameterOptimizer:
         
         return study.best_params
 
+    def optimize_mlp(self, X_train, y_train, n_trials: int = 50, n_folds: int = 5, **kwargs):
+        """MLP 하이퍼파라미터 최적화 (본학습과 동일한 n_folds 사용)."""
+        X_train = np.asarray(X_train)
+        y_train = np.asarray(y_train).ravel()
+
+        def objective(trial):
+            h1 = trial.suggest_int('hidden1', 64, 512)
+            h2 = trial.suggest_int('hidden2', 32, 256)
+            hidden_layer_sizes = (h1, h2)
+            max_iter = trial.suggest_int('max_iter', 200, 800)
+            learning_rate_init = trial.suggest_float('learning_rate_init', 1e-4, 0.01, log=True)
+            alpha = trial.suggest_float('alpha', 1e-5, 0.1, log=True)
+            early_stopping = True
+            validation_fraction = trial.suggest_float('validation_fraction', 0.05, 0.2)
+
+            cls = MLPRegressor if self.task_type == 'regression' else MLPClassifier
+            mlp = cls(
+                hidden_layer_sizes=hidden_layer_sizes,
+                max_iter=max_iter,
+                learning_rate_init=learning_rate_init,
+                alpha=alpha,
+                early_stopping=early_stopping,
+                validation_fraction=validation_fraction,
+                random_state=self.random_state,
+            )
+            pipe = Pipeline([('scaler', StandardScaler()), ('mlp', mlp)])
+
+            if self.task_type == 'classification':
+                cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
+                scoring = 'roc_auc'
+            else:
+                cv = KFold(n_splits=n_folds, shuffle=True, random_state=self.random_state)
+                scoring = 'neg_mean_squared_error'
+
+            scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring=scoring, n_jobs=1)
+            if self.task_type == 'regression':
+                return -scores.mean()
+            return scores.mean()
+
+        study = optuna.create_study(
+            direction='minimize' if self.task_type == 'regression' else 'maximize',
+            sampler=optuna.samplers.TPESampler(seed=self.random_state)
+        )
+        print(f"  🔄 Optuna 최적화 시작 (총 {n_trials} trials)...")
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+        best = study.best_params
+        best_params = {
+            'hidden_layer_sizes': [best['hidden1'], best['hidden2']],  # list로 저장 (JSON 호환)
+            'max_iter': best['max_iter'],
+            'learning_rate_init': best['learning_rate_init'],
+            'alpha': best['alpha'],
+            'early_stopping': True,
+            'validation_fraction': best['validation_fraction'],
+        }
+        print(f"  ✅ 최적화 완료! Best Score: {study.best_value:.6f}")
+        self.best_params['mlp'] = best_params
+        if hasattr(self, 'optuna_log_path') and self.optuna_log_path:
+            save_optuna_log(study, 'mlp', self.optuna_log_path, n_trials)
+        return best_params
+
 
 def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regression',
-                              n_trials=50, random_state=42, use_saved_params=False,
+                              n_trials=50, n_folds=5, random_state=42, use_saved_params=False,
                               params_filepath=None, encoded_cols_tag='_encoded', use_gpu=False,
                               sample_size=None, additional_save_info=None, model_types=None):
     """하이퍼파라미터 최적화 또는 저장된 파라미터 로드"""
@@ -379,7 +437,7 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
         raise ImportError("Optuna가 설치되어 있지 않습니다. 'pip install optuna'로 설치해주세요.")
     
     print(f"\n{'='*60}")
-    print("🔍 Optuna를 사용한 하이퍼파라미터 최적화 시작")
+    print(f"🔍 Optuna 하이퍼파라미터 최적화 시작 ({n_folds}-Fold CV, 본학습과 동일)")
     if use_gpu:
         print("🚀 GPU를 사용하여 최적화를 진행합니다.")
     
@@ -428,7 +486,7 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
     # 각 모델별로 최적화
     for model_type in model_types:
         print(f"\n{'='*60}")
-        print(f"🔍 {model_type.upper()} 하이퍼파라미터 최적화 (n_trials={n_trials})")
+        print(f"🔍 {model_type.upper()} 하이퍼파라미터 최적화 (n_trials={n_trials}, n_folds={n_folds})")
         print(f"{'='*60}")
         
         # 모델별로 사용할 컬럼 선택
@@ -447,6 +505,7 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
             params = optimizer.optimize_catboost(
                 X_train_model, y_train_sample,
                 n_trials=n_trials,
+                n_folds=n_folds,
                 cat_features=all_categorical_cols if all_categorical_cols else None
             )
         elif model_type == 'lightgbm':
@@ -458,7 +517,8 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
             
             params = optimizer.optimize_lightgbm(
                 X_train_model, y_train_sample,
-                n_trials=n_trials
+                n_trials=n_trials,
+                n_folds=n_folds
             )
         elif model_type == 'xgboost':
             # XGBoost: 인코딩된 컬럼 + 수치형 컬럼만 사용 (모든 범주형 컬럼 제외)
@@ -469,8 +529,21 @@ def optimize_hyperparameters(X_train, y_train, categorical_cols, task_type='regr
             
             params = optimizer.optimize_xgboost(
                 X_train_model, y_train_sample,
-                n_trials=n_trials
+                n_trials=n_trials,
+                n_folds=n_folds
             )
+        elif model_type == 'mlp':
+            all_categorical_cols = X_train_sample.select_dtypes(include=['object', 'category']).columns.tolist()
+            feature_cols = [col for col in X_train_sample.columns if col not in all_categorical_cols]
+            X_train_model = X_train_sample[feature_cols].copy()
+            print(f"  MLP: 수치형 특성 {len(feature_cols)}개 사용 (StandardScaler + MLP)")
+            params = optimizer.optimize_mlp(
+                X_train_model, y_train_sample,
+                n_trials=n_trials,
+                n_folds=n_folds
+            )
+        else:
+            continue
         
         best_params[model_type] = params
         
@@ -537,23 +610,64 @@ def optimize_ridge_alpha(predictions_dict: Dict[str, np.ndarray], y_true: np.nda
 
 def save_hyperparameters(best_params: Dict[str, dict], filepath: str, 
                          task_type: str = 'regression', additional_info: Optional[dict] = None):
-    """최적화된 하이퍼파라미터를 JSON 파일로 저장"""
+    """최적화된 하이퍼파라미터를 JSON 파일로 저장
+
+    기존 파일이 있을 경우:
+    - 이전에 저장된 hyperparameters를 유지하면서,
+      새로 최적화된 모델의 파라미터만 해당 키에 대해 갱신한다.
+    - 다른 모델의 하이퍼파라미터는 삭제하지 않고 그대로 둔다.
+    """
+    now_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    merged_hyperparams: Dict[str, dict] = {}
+    merged_additional: Optional[dict] = None
+    final_task_type = task_type
+
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+
+        # 기존 hyperparameters 유지 + 새 best_params로 해당 모델 키만 갱신
+        existing_hparams = existing.get('hyperparameters', {})
+        if isinstance(existing_hparams, dict):
+            merged_hyperparams.update(existing_hparams)
+        merged_hyperparams.update(best_params)
+
+        # task_type은 기존 값이 있으면 우선 사용 (프로젝트 일관성 유지)
+        if 'task_type' in existing:
+            final_task_type = existing.get('task_type') or task_type
+
+        # additional_info는 기존 + 새로운 정보 머지
+        existing_add = existing.get('additional_info')
+        if isinstance(existing_add, dict):
+            merged_additional = dict(existing_add)
+        if additional_info:
+            if merged_additional is None:
+                merged_additional = dict(additional_info)
+            else:
+                merged_additional.update(additional_info)
+    else:
+        merged_hyperparams.update(best_params)
+        if additional_info:
+            merged_additional = dict(additional_info)
+
     save_data = {
-        'task_type': task_type,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'hyperparameters': best_params
+        'task_type': final_task_type,
+        'timestamp': now_ts,
+        'hyperparameters': merged_hyperparams,
     }
-    
-    if additional_info:
-        save_data['additional_info'] = additional_info
-    
+    if merged_additional:
+        save_data['additional_info'] = merged_additional
+
     # 디렉토리가 없으면 생성
     os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
-    
+
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(save_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n✅ 하이퍼파라미터 저장 완료: {filepath}")
+
+    print(f"\n✅ 하이퍼파라미터 저장 완료 (병합 모드): {filepath}")
 
 
 def load_hyperparameters(filepath: str) -> Dict[str, dict]:

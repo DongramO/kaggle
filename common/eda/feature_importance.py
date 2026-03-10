@@ -127,12 +127,6 @@ def _save_and_print_importance(importance_df: pd.DataFrame, model_type: str,
     filename = f'{model_type}_{suffix}_importance.csv' if suffix else f'{model_type}_feature_importance.csv'
     csv_path = os.path.join(save_dir, filename)
     importance_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    print(f"   ✅ 저장: {csv_path}")
-    
-    print(f"\n   상위 {top_n}개 특성:")
-    for idx, row in importance_df.head(top_n).iterrows():
-        std_str = f" (std: {row['Std']:.4f})" if 'Std' in row else ""
-        print(f"     {idx+1:2d}. {row['Feature']:40s}: {row['Importance']:8.4f}{std_str}")
 
 
 # ============================================================================
@@ -173,10 +167,6 @@ def analyze_feature_importance(trainer, X_train: pd.DataFrame,
     
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
-    print(f"\n{'='*60}")
-    print("📊 Feature Importance 분석")
-    print(f"{'='*60}")
-    
     all_importances = _extract_all_model_importances(
         trainer, X_train, categorical_cols, encoded_cols_tag, use_permutation=False
     )
@@ -186,20 +176,13 @@ def analyze_feature_importance(trainer, X_train: pd.DataFrame,
         return None
     
     for model_type, importance_df in all_importances.items():
-        print(f"\n🔍 {model_type.upper()} Feature Importance 추출 중...")
         _save_and_print_importance(importance_df, model_type, save_dir, top_n)
     
     if VISUALIZATION_AVAILABLE:
-        print(f"\n📈 Feature Importance 시각화 중...")
         _plot_model_comparison(all_importances, top_n, save_dir)
         if len(all_importances) > 1:
             _plot_combined_comparison(all_importances, top_n, save_dir)
             _find_and_save_common_features(all_importances, top_n, save_dir)
-    
-    print(f"\n{'='*60}")
-    print(f"✅ Feature Importance 분석 완료!")
-    print(f"   결과 저장 위치: {save_dir}/")
-    print(f"{'='*60}")
     
     return all_importances
 
@@ -243,10 +226,6 @@ def analyze_permutation_importance(trainer, X_train: pd.DataFrame, y_train: pd.S
     
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
-    print(f"\n{'='*60}")
-    print("📊 Permutation Importance 분석")
-    print(f"{'='*60}")
-    
     all_importances = _extract_all_model_importances(
         trainer, X_train, categorical_cols, encoded_cols_tag,
         use_permutation=True, y_train=y_train, n_repeats=n_repeats
@@ -257,20 +236,13 @@ def analyze_permutation_importance(trainer, X_train: pd.DataFrame, y_train: pd.S
         return None
     
     for model_type, importance_df in all_importances.items():
-        print(f"\n🔍 {model_type.upper()} Permutation Importance 추출 중...")
         _save_and_print_importance(importance_df, model_type, save_dir, top_n, suffix='permutation')
     
     if VISUALIZATION_AVAILABLE:
-        print(f"\n📈 Permutation Importance 시각화 중...")
         _plot_model_comparison(all_importances, top_n, save_dir, suffix='permutation')
         if len(all_importances) > 1:
             _plot_combined_comparison(all_importances, top_n, save_dir, suffix='permutation')
             _find_and_save_common_features(all_importances, top_n, save_dir, suffix='permutation')
-    
-    print(f"\n{'='*60}")
-    print(f"✅ Permutation Importance 분석 완료!")
-    print(f"   결과 저장 위치: {save_dir}/")
-    print(f"{'='*60}")
     
     return all_importances
 
@@ -311,10 +283,6 @@ def analyze_ensemble_feature_importance(trainer, ensemble, X_train: pd.DataFrame
     
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
-    print(f"\n{'='*60}")
-    print("📊 앙상블 Feature Importance 분석")
-    print(f"{'='*60}")
-    
     encoded_cols = [col for col in X_train.columns if col.endswith(encoded_cols_tag)]
     model_importances = {}
     all_features = set()
@@ -334,9 +302,6 @@ def analyze_ensemble_feature_importance(trainer, ensemble, X_train: pd.DataFrame
     if len(model_importances) == 0:
         print("⚠️ 추출된 Feature Importance가 없습니다.")
         return None
-    
-    print(f"\n🔍 앙상블 가중치 적용 중...")
-    print(f"   앙상블 가중치: {ensemble.weights}")
     
     ensemble_importance = {}
     for feature in all_features:
@@ -364,20 +329,9 @@ def analyze_ensemble_feature_importance(trainer, ensemble, X_train: pd.DataFrame
     
     csv_path = os.path.join(save_dir, 'ensemble_feature_importance.csv')
     ensemble_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    print(f"   ✅ 저장: {csv_path}")
-    
-    print(f"\n   상위 {top_n}개 특성:")
-    for idx, row in ensemble_df.head(top_n).iterrows():
-        print(f"     {idx+1:2d}. {row['Feature']:40s}: {row['Importance']:8.4f}")
     
     if VISUALIZATION_AVAILABLE:
-        print(f"\n📈 앙상블 Feature Importance 시각화 중...")
         _plot_ensemble_importance(ensemble_df, top_n, save_dir)
-    
-    print(f"\n{'='*60}")
-    print(f"✅ 앙상블 Feature Importance 분석 완료!")
-    print(f"   결과 저장 위치: {save_dir}/")
-    print(f"{'='*60}")
     
     return ensemble_df
 
@@ -417,10 +371,6 @@ def compare_model_and_ensemble_importance(model_importances: Dict[str, pd.DataFr
     
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     
-    print(f"\n{'='*60}")
-    print("📊 모델별 vs 앙상블 Feature Importance 비교")
-    print(f"{'='*60}")
-    
     all_features = set(ensemble_importance['Feature'].tolist())
     for model_df in model_importances.values():
         all_features.update(model_df['Feature'].tolist())
@@ -442,29 +392,9 @@ def compare_model_and_ensemble_importance(model_importances: Dict[str, pd.DataFr
     
     csv_path = os.path.join(save_dir, 'model_vs_ensemble_comparison.csv')
     comparison_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    print(f"   ✅ 저장: {csv_path}")
-    
-    print(f"\n   상위 {top_n}개 특성 비교:")
-    print(f"   {'Feature':<40} {'Ensemble':>12} ", end='')
-    for model_type in model_importances.keys():
-        print(f"{model_type.upper():>12} ", end='')
-    print()
-    print("   " + "-" * (40 + 12 * (len(model_importances) + 1)))
-    
-    for idx, row in comparison_df.head(top_n).iterrows():
-        print(f"   {row['Feature']:<40} {row['Ensemble']:>12.4f} ", end='')
-        for model_type in model_importances.keys():
-            print(f"{row[model_type.upper()]:>12.4f} ", end='')
-        print()
     
     if VISUALIZATION_AVAILABLE:
-        print(f"\n📈 비교 시각화 중...")
         _plot_model_vs_ensemble_comparison(comparison_df, model_importances, top_n, save_dir)
-    
-    print(f"\n{'='*60}")
-    print(f"✅ 비교 분석 완료!")
-    print(f"   결과 저장 위치: {save_dir}/")
-    print(f"{'='*60}")
     
     return comparison_df
 
@@ -501,7 +431,6 @@ def _plot_model_comparison(all_importances: Dict[str, pd.DataFrame], top_n: int,
     filename = 'feature_importance_comparison.png' if suffix == '' else 'permutation_importance_comparison.png'
     plot_path = os.path.join(save_dir, filename)
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"   ✅ 저장: {plot_path}")
     plt.close()
 
 
@@ -540,14 +469,11 @@ def _plot_combined_comparison(all_importances: Dict[str, pd.DataFrame], top_n: i
         filename = 'feature_importance_combined.png' if suffix == '' else 'permutation_importance_combined.png'
         plot_path = os.path.join(save_dir, filename)
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        print(f"   ✅ 저장: {plot_path}")
         plt.close()
 
 
 def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top_n: int, save_dir: str, suffix: str = ''):
     """모든 모델에서 공통으로 중요하게 평가된 특성 찾기 및 저장"""
-    print(f"\n🔍 공통 중요 특성 분석...")
-    
     top_features_sets = {}
     for model_type, importance_df in all_importances.items():
         top_features_sets[model_type] = set(importance_df.head(top_n)['Feature'].values)
@@ -555,8 +481,6 @@ def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top
     common_features = set.intersection(*top_features_sets.values())
     
     if common_features:
-        print(f"   모든 모델에서 상위 {top_n}개에 포함된 특성: {len(common_features)}개")
-        
         common_importance = {}
         for feature in common_features:
             avg_importance = np.mean([
@@ -569,11 +493,6 @@ def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top
             common_importance[feature] = avg_importance
         
         sorted_common = sorted(common_importance.items(), key=lambda x: x[1], reverse=True)
-        
-        print(f"\n   공통 중요 특성 (중요도 순):")
-        for i, (feature, avg_imp) in enumerate(sorted_common, 1):
-            print(f"     {i:2d}. {feature:40s}: 평균 중요도 {avg_imp:8.4f}")
-        
         common_df = pd.DataFrame([
             {'Feature': feat, 'Average_Importance': imp} 
             for feat, imp in sorted_common
@@ -581,9 +500,6 @@ def _find_and_save_common_features(all_importances: Dict[str, pd.DataFrame], top
         filename = 'common_important_features.csv' if suffix == '' else 'common_important_features_permutation.csv'
         csv_path = os.path.join(save_dir, filename)
         common_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-        print(f"   ✅ 저장: {csv_path}")
-    else:
-        print(f"   공통 중요 특성이 없습니다.")
 
 
 def _plot_ensemble_importance(ensemble_df: pd.DataFrame, top_n: int, save_dir: str):
@@ -604,7 +520,6 @@ def _plot_ensemble_importance(ensemble_df: pd.DataFrame, top_n: int, save_dir: s
     plt.tight_layout()
     plot_path = os.path.join(save_dir, 'ensemble_feature_importance.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"   ✅ 저장: {plot_path}")
     plt.close()
 
 
@@ -642,7 +557,6 @@ def _plot_model_vs_ensemble_comparison(comparison_df: pd.DataFrame,
     plt.tight_layout()
     plot_path = os.path.join(save_dir, 'model_vs_ensemble_comparison.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"   ✅ 저장: {plot_path}")
     plt.close()
     
     # 히트맵
@@ -660,5 +574,4 @@ def _plot_model_vs_ensemble_comparison(comparison_df: pd.DataFrame,
     plt.tight_layout()
     plot_path = os.path.join(save_dir, 'model_vs_ensemble_heatmap.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"   ✅ 저장: {plot_path}")
     plt.close()

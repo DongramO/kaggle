@@ -15,6 +15,8 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.metrics import accuracy_score, roc_auc_score, log_loss
 from sklearn.inspection import permutation_importance
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 
 from ..utils.helpers import setup_gpu_params, check_gpu_availability
 
@@ -102,6 +104,18 @@ class CatBoostModel(BaseModel):
             kwargs['early_stopping_rounds'] = fit_params.pop('early_stopping_rounds')
         cls = CatBoostRegressor if self.task_type == 'regression' else CatBoostClassifier
         self.model = cls(**fit_params)
+        # CatBoost는 범주형 컬럼에 float/NaN이 있으면 에러. object/category 컬럼을 str로 통일 (NaN → '__NA__')
+        if isinstance(X_train, pd.DataFrame):
+            X_train = X_train.copy()
+            cat_names = self.cat_features if self.cat_features is not None else X_train.select_dtypes(include=['object', 'category']).columns.tolist()
+            for col in cat_names:
+                if col in X_train.columns:
+                    X_train[col] = X_train[col].fillna('__NA__').astype(str)
+            if X_val is not None and isinstance(X_val, pd.DataFrame):
+                X_val = X_val.copy()
+                for col in cat_names:
+                    if col in X_val.columns:
+                        X_val[col] = X_val[col].fillna('__NA__').astype(str)
         fit_kw = dict(cat_features=self._cat_indices(X_train), **kwargs)
         if X_val is not None and y_val is not None:
             fit_kw['eval_set'] = (X_val, y_val)
@@ -230,6 +244,58 @@ class XGBoostModel(BaseModel):
         return self.predict(X)
 
 
+class MLPModel(BaseModel):
+    """MLP 래퍼. 특성 스케일링 후 학습. 트리 모델이 놓치기 쉬운 비선형·특성 간 상호작용 보완용."""
+
+    def __init__(self, task_type: str = 'regression', random_state: int = 42, **kwargs):
+        super().__init__('mlp', task_type, random_state)
+        default = {
+            'hidden_layer_sizes': (256, 128),
+            'max_iter': 500,
+            'early_stopping': True,
+            'validation_fraction': 0.1,
+            'random_state': random_state,
+        }
+        default.update(kwargs)
+        self.params = default
+        self.scaler = StandardScaler()
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
+        X_train = np.asarray(X_train)
+        y_train = np.asarray(y_train).ravel()
+        self.scaler.fit(X_train)
+        X_scaled = self.scaler.transform(X_train)
+        cls = MLPRegressor if self.task_type == 'regression' else MLPClassifier
+        # sklearn MLP가 받지 않는 인자 제거 (use_gpu, n_estimators 등)
+        skip_keys = {'random_state', 'use_gpu', 'n_estimators', 'num_boost_round'}
+        params = {k: v for k, v in self.params.items() if k not in skip_keys}
+        params['random_state'] = self.random_state
+        self.model = cls(**params)
+        self.model.fit(X_scaled, y_train)
+        if self.model.coefs_:
+            self.feature_importance_ = np.abs(self.model.coefs_[0]).sum(axis=1)
+        else:
+            self.feature_importance_ = np.ones(X_train.shape[1])
+        if self.task_type == 'classification':
+            self.classes_ = np.unique(y_train)
+        return self
+
+    def predict(self, X):
+        if self.model is None:
+            raise ValueError("Model must be fitted before prediction")
+        X = self.scaler.transform(np.asarray(X))
+        return self.model.predict(X)
+
+    def predict_proba(self, X):
+        if self.task_type != 'classification':
+            return self.predict(X)
+        X = self.scaler.transform(np.asarray(X))
+        proba = self.model.predict_proba(X)
+        if proba.ndim == 1:
+            return np.column_stack([1 - proba, proba])
+        return proba
+
+
 def _compute_score(y_true, y_pred, task_type: str, metric: str):
     """문제별 평가 지표 계산. (score, metric_name) 반환. metric='auto'면 task 기본값 사용."""
     if task_type == 'regression':
@@ -257,16 +323,17 @@ class ModelTrainer:
     """K-Fold CV 학습, OOF 예측, 특성 중요도/permutation importance 제공. 문제별 평가·출력 형식은 scoring_metric으로 선택."""
 
     def __init__(self, task_type: str = 'regression', random_state: int = 42, use_gpu: bool = False,
-                 scoring_metric: Optional[str] = None):
+                 scoring_metric: Optional[str] = None, early_stopping_rounds: int = 100):
         """
         task_type: 'regression' | 'classification'
-        scoring_metric: 평가·제출에 사용할 지표. None이면 'auto'(회귀=RMSE, 분류=AUC).
-          회귀: 'rmse', 'mae', 'r2' / 분류: 'auc', 'logloss', 'accuracy'
+        scoring_metric: 평가·제출에 사용할 지표. None이면 'auto'.
+        early_stopping_rounds: 트리 모델(CatBoost/LightGBM/XGBoost) 검증 성능 N round 개선 없으면 중단.
         """
         self.task_type = task_type
         self.scoring_metric = (scoring_metric or 'auto').lower()
         self.random_state = random_state
         self.use_gpu = use_gpu
+        self.early_stopping_rounds = early_stopping_rounds
         self.models = {}
         self.cv_scores = {}
         self.oof_predictions = {}
@@ -302,17 +369,20 @@ class ModelTrainer:
 
     def _fit_fold(self, model, model_type: str, X_train, y_train, X_val, y_val, n_rounds: int):
         """Fold 1개 학습. model_type별 early stopping 호출 통일."""
+        es = self.early_stopping_rounds
         if model_type == 'lightgbm':
             model.fit(X_train, y_train, X_val=X_val, y_val=y_val, num_boost_round=n_rounds,
-                      callbacks=[lgb.early_stopping(stopping_rounds=100, verbose=False)])
+                      callbacks=[lgb.early_stopping(stopping_rounds=es, verbose=False)])
         elif model_type == 'xgboost':
             model.fit(X_train, y_train, X_val=X_val, y_val=y_val, num_boost_round=n_rounds,
-                      early_stopping_rounds=100, verbose_eval=False)
+                      early_stopping_rounds=es, verbose_eval=False)
+        elif model_type == 'mlp':
+            model.fit(X_train, y_train, X_val=X_val, y_val=y_val)
         else:
-            model.fit(X_train, y_train, X_val=X_val, y_val=y_val, early_stopping_rounds=100)
+            model.fit(X_train, y_train, X_val=X_val, y_val=y_val, early_stopping_rounds=es)
 
     def create_model(self, model_type: str, cat_features: Optional[List] = None, **kwargs):
-        """model_type에 따라 CatBoost/LightGBM/XGBoost 인스턴스 생성."""
+        """model_type에 따라 CatBoost/LightGBM/XGBoost/MLP 인스턴스 생성."""
         kwargs_clean = {k: v for k, v in kwargs.items() if k != 'random_state'}
         common = dict(task_type=self.task_type, random_state=self.random_state, use_gpu=self.use_gpu, **kwargs_clean)
         if model_type == 'catboost':
@@ -321,6 +391,8 @@ class ModelTrainer:
             return LightGBMModel(**common)
         if model_type == 'xgboost':
             return XGBoostModel(**common)
+        if model_type == 'mlp':
+            return MLPModel(**common)
         raise ValueError(f"Unknown model_type: {model_type}")
     
     def train_with_cv(self, X, y, model_type: str, n_folds: int = 5,
@@ -331,10 +403,11 @@ class ModelTrainer:
             n_splits=n_folds, shuffle=True, random_state=self.random_state
         )
         models, oof_preds, fold_scores = [], np.zeros(len(X)), []
-        n_rounds = model_params.get('num_boost_round', 1000)
+        train_fold_scores = []
+        # LightGBM/XGBoost: JSON에는 n_estimators로 저장되므로 num_boost_round로 사용
+        n_rounds = model_params.get('num_boost_round', model_params.get('n_estimators', 1000))
 
         for fold, (train_idx, val_idx) in enumerate(kf.split(X, y), 1):
-            print(f"\n📊 Fold {fold}/{n_folds} 학습 중...")
             X_train = X.iloc[train_idx] if isinstance(X, pd.DataFrame) else X[train_idx]
             X_val = X.iloc[val_idx] if isinstance(X, pd.DataFrame) else X[val_idx]
             y_train = y.iloc[train_idx] if isinstance(y, pd.Series) else y[train_idx]
@@ -346,16 +419,20 @@ class ModelTrainer:
             val_pred = self._predict(model, X_val)
             oof_preds[val_idx] = val_pred
             score, metric = self._score(y_val, val_pred)
-            print(f"  Fold {fold} {metric}: {score:.4f}")
             fold_scores.append(score)
+            train_pred = self._predict(model, X_train)
+            train_score, _ = self._score(y_train, train_pred)
+            train_fold_scores.append(train_score)
             models.append(model)
 
         cv_score, _ = self._score(y, oof_preds)
-        print(f"\n✅ CV {metric}: {cv_score:.4f} (std: {np.std(fold_scores):.4f})")
         self.models[model_type] = models
         self.oof_predictions[model_type] = oof_preds
-        self.cv_scores[model_type] = {'mean': cv_score, 'std': np.std(fold_scores), 'fold_scores': fold_scores}
-        return {'models': models, 'oof_predictions': oof_preds, 'cv_score': cv_score, 'fold_scores': fold_scores}
+        self.cv_scores[model_type] = {
+            'mean': cv_score, 'std': np.std(fold_scores),
+            'fold_scores': fold_scores, 'train_fold_scores': train_fold_scores,
+        }
+        return {'models': models, 'oof_predictions': oof_preds, 'cv_score': cv_score, 'fold_scores': fold_scores, 'train_fold_scores': train_fold_scores}
     
     def predict_test(self, X_test, model_type: str):
         """테스트 예측. scoring_metric에 따라 회귀=예측값, 분류=확률 또는 라벨. K-Fold 평균."""
@@ -429,13 +506,7 @@ class ModelTrainer:
         rs = random_state if random_state is not None else self.random_state
         fold_importances = []
         n_object = X.shape[1] - len(numeric_cols)
-        print(f"\n📊 {model_type.upper()} Permutation Importance (n_repeats={n_repeats}, folds={len(models)})", end="")
-        if n_object > 0:
-            print(f" — object 컬럼 {n_object}개 제외, 수치형 {len(numeric_cols)}개만 사용")
-        else:
-            print()
         for fold_idx, model in enumerate(models, 1):
-            print(f"   Fold {fold_idx}/{len(models)} 처리 중...", end='\r')
             try:
                 if not hasattr(model, 'predict'):
                     continue
@@ -446,7 +517,6 @@ class ModelTrainer:
                 fold_importances.append({'importances': imp, 'stds': perm.importances_std})
             except Exception as e:
                 print(f"   ⚠️ Fold {fold_idx} 실패: {e}")
-        print()
         if not fold_importances:
             return pd.DataFrame()
         all_imp = np.array([f['importances'] for f in fold_importances])
@@ -455,7 +525,6 @@ class ModelTrainer:
         if len(feature_names) != len(mean_imp):
             feature_names = feature_names[:len(mean_imp)] if len(feature_names) > len(mean_imp) else feature_names + [f'Feature_{i}' for i in range(len(feature_names), len(mean_imp))]
         importance_df = pd.DataFrame({'Feature': feature_names, 'Importance': mean_imp, 'Std': std_imp}).sort_values('Importance', ascending=False)
-        print("   상위 10개:", importance_df.head(10).to_string(index=False))
         return importance_df
 
 
@@ -489,7 +558,6 @@ class EnsembleModel:
         if method == 'simple_average':
             n_models = len(predictions_dict)
             self.weights = {name: 1.0 / n_models for name in predictions_dict.keys()}
-            print(f"\n📊 단순 평균 앙상블 (가중치: 각 {1.0/n_models:.4f})")
         
         elif method == 'weighted_average':
             if optimize:
@@ -497,7 +565,6 @@ class EnsembleModel:
             else:
                 n_models = len(predictions_dict)
                 self.weights = {name: 1.0 / n_models for name in predictions_dict.keys()}
-                print(f"\n📊 가중 평균 앙상블 (최적화 없음, 가중치: 각 {1.0/n_models:.4f})")
             weight_sum = sum(self.weights.values())
             if abs(weight_sum - 1.0) > 1e-6:
                 self.weights = {name: w / weight_sum for name, w in self.weights.items()}
@@ -517,8 +584,6 @@ class EnsembleModel:
                 ensemble_pred = np.clip(ensemble_pred, 0.0, 1.0)
         
         self.ensemble_score, metric_name = _compute_score(y_true, ensemble_pred, self.task_type, self.scoring_metric)
-        print(f"\n✅ 앙상블 학습 완료!")
-        print(f"  평가 지표 ({metric_name}): {self.ensemble_score:.6f}")
     
     def _fit_ridge_meta(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray, alpha: float):
         """OOF 예측을 입력으로 Ridge 메타모델 학습. 분류 시 예측은 0~1로 clip."""
@@ -527,10 +592,6 @@ class EnsembleModel:
         X_meta = np.column_stack([predictions_dict[n] for n in self.model_names])
         self.meta_model = Ridge(alpha=alpha).fit(X_meta, y_true)
         self.weights = {n: float(self.meta_model.coef_[i]) for i, n in enumerate(self.model_names)}
-        print(f"\n📊 Ridge 메타모델 앙상블 (alpha={alpha})")
-        for n in self.model_names:
-            print(f"  {n:15s} 계수: {self.weights[n]:.6f}")
-        print(f"  절편: {self.meta_model.intercept_:.6f}")
     
     def _optimize_weights(self, predictions_dict: Dict[str, np.ndarray], 
                          y_true: np.ndarray) -> Dict[str, float]:
@@ -601,10 +662,6 @@ class EnsembleModel:
             optimized_weights = optimized_weights / weight_sum
         
         weights_dict = {name: float(w) for name, w in zip(model_names, optimized_weights)}
-        print(f"\n📊 최적화된 가중치:")
-        for name, weight in sorted(weights_dict.items()):
-            print(f"  {name:15s}: {weight:.6f} ({weight*100:.2f}%)")
-        print(f"  가중치 합: {sum(weights_dict.values()):.6f}")
         return weights_dict
     
     def _weights_by_performance(self, predictions_dict: Dict[str, np.ndarray], y_true: np.ndarray,
@@ -628,7 +685,6 @@ class EnsembleModel:
         weights = shifted / shifted.sum()
         weights = np.clip(weights, 0.05, 1.0)
         weights = weights / weights.sum()
-        print(f"  → 모델별 OOF 점수에 비례한 가중치 적용 (성능 차이 반영)")
         return weights
     
     def _compute_ensemble_prediction(self, predictions_dict: Dict[str, np.ndarray]) -> np.ndarray:

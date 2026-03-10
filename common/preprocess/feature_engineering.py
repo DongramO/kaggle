@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from typing import List, Optional, Union, Dict, Any
+from sklearn.model_selection import KFold, StratifiedKFold
 
 
 def _get_config_value(config: dict, key: str, default_flag: bool = False) -> tuple[bool, dict]:
@@ -432,6 +433,76 @@ def apply_feature_engineering_pipeline(
         df = create_binning_features(df, numeric_cols, n_bins, strategy)
     
     return df
+
+
+def apply_target_encoding(
+    train: pd.DataFrame,
+    y: Union[pd.Series, np.ndarray],
+    test: pd.DataFrame,
+    cols: List[str],
+    n_splits: int = 5,
+    smoothing: float = 10.0,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    타겟 인코딩(Mean Encoding)을 K-Fold 방식으로 적용하여 데이터 누수를 방지.
+    
+    - train: 학습용 특징 데이터프레임
+    - y: 학습 타겟 (Series 또는 ndarray)
+    - test: 테스트 특징 데이터프레임
+    - cols: 타겟 인코딩을 적용할 컬럼 리스트 (범주형 위주 권장)
+    - n_splits: K-Fold 개수
+    - smoothing: count가 작은 카테고리에 대한 smoothing 강도
+    - random_state: CV 시드
+    """
+    train_fe = train.copy()
+    test_fe = test.copy()
+    if len(cols) == 0 or len(train_fe) == 0:
+        return train_fe, test_fe
+    
+    y_series = pd.Series(y).reset_index(drop=True)
+    global_mean = y_series.mean()
+    
+    # 분류(레이블 개수 적음)이면 StratifiedKFold, 아니면 KFold 사용
+    y_unique = y_series.unique()
+    use_stratified = len(y_unique) <= 10
+    cv_class = StratifiedKFold if use_stratified else KFold
+    cv_kwargs = dict(n_splits=n_splits, shuffle=True, random_state=random_state)
+    cv = cv_class(**cv_kwargs)
+
+    for col in cols:
+        if col not in train_fe.columns:
+            continue
+        
+        # 전체 train 기준 통계 (test 매핑용)
+        tmp_all = pd.DataFrame({'col': train_fe[col].values, 'target': y_series.values})
+        stats_all = tmp_all.groupby('col')['target'].agg(['count', 'mean'])
+        smooth_all = (stats_all['count'] * stats_all['mean'] + smoothing * global_mean) / (
+            stats_all['count'] + smoothing
+        )
+        # test에는 전체 통계로 매핑
+        test_fe[f"{col}_TE"] = test_fe[col].map(smooth_all).fillna(global_mean)
+        
+        # train OOF 방식으로 TE 생성
+        te_col_name = f"{col}_TE"
+        train_fe[te_col_name] = np.nan
+        
+        # 각 컬럼마다 split을 다시 생성 (generator 소모 방지)
+        for tr_idx, val_idx in cv.split(train_fe, y_series):
+            col_tr = train_fe.iloc[tr_idx][col]
+            y_tr = y_series.iloc[tr_idx]
+            tmp_fold = pd.DataFrame({'col': col_tr.values, 'target': y_tr.values})
+            fold_stats = tmp_fold.groupby('col')['target'].agg(['count', 'mean'])
+            fold_smooth = (fold_stats['count'] * fold_stats['mean'] + smoothing * global_mean) / (
+                fold_stats['count'] + smoothing
+            )
+            te_values = train_fe.iloc[val_idx][col].map(fold_smooth)
+            train_fe.iloc[val_idx, train_fe.columns.get_loc(te_col_name)] = te_values.values
+        
+        train_fe[te_col_name] = train_fe[te_col_name].fillna(global_mean).astype(np.float64)
+        test_fe[f"{col}_TE"] = test_fe[f"{col}_TE"].astype(np.float64)
+    
+    return train_fe, test_fe
 
 
 # ============================================================================

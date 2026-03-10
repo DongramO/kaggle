@@ -50,10 +50,6 @@ def load_data(
         test_path = os.path.abspath(test_path)
         sub_path = os.path.abspath(sub_path)
     
-    print(f"📂 데이터 경로:")
-    print(f"  Train: {train_path}")
-    print(f"  Test: {test_path}")
-    print(f"  Submission: {sub_path}")
     
     # 파일 존재 확인
     for path, name in [(train_path, 'Train'), (test_path, 'Test'), (sub_path, 'Submission')]:
@@ -64,7 +60,5 @@ def load_data(
     df_test = pd.read_csv(test_path)
     df_sub = pd.read_csv(sub_path)
     
-    print(f"✅ 데이터 로드 완료!")
-    print(f"  Train: {df_train.shape}, Test: {df_test.shape}, Submission: {df_sub.shape}")
     
     return df_train, df_test, df_sub

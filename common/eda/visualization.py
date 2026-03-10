@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import warnings
 import matplotlib.pyplot as plt
-from typing import List, Optional, Dict, Tuple, Union
+import seaborn as sns
+from typing import List, Optional, Dict, Tuple, Union, Any
 from dataclasses import dataclass
 
 
@@ -455,6 +456,95 @@ def plot_histogram_by_group(df: pd.DataFrame, value_col: str, group_col: str,
     plt.tight_layout()
     
     return fig, stats_dict
+
+
+def plot_crosstab_heatmap_by_group(
+    df: pd.DataFrame,
+    row_col: str,
+    col_col: str,
+    group_col: str,
+    group_values: Optional[List[Any]] = None,
+    figsize: Tuple[int, int] = (12, 5),
+    cmap: str = 'Blues',
+    suptitle: Optional[str] = None,
+    set_korean_font: bool = True,
+) -> plt.Figure:
+    """
+    group_col 값별로 row_col × col_col 빈도 crosstab heatmap을 나란히 그린다.
+    반환: figure (저장은 호출부에서 fig.savefig 등 처리).
+    """
+    if set_korean_font:
+        try:
+            from .correlation import _set_korean_font
+            _set_korean_font()
+        except Exception:
+            pass
+    if row_col not in df.columns or col_col not in df.columns or group_col not in df.columns:
+        raise ValueError(f"필요한 컬럼이 없습니다: {row_col}, {col_col}, {group_col}")
+    if group_values is None:
+        group_values = sorted(df[group_col].dropna().unique(), key=lambda x: (str(x).lower(), x))
+    n = len(group_values)
+    fig, axes = plt.subplots(1, n, figsize=(figsize[0] if n <= 2 else 4 * n, figsize[1]))
+    if n == 1:
+        axes = [axes]
+    for idx, gval in enumerate(group_values):
+        sub = df[df[group_col] == gval]
+        ct = pd.crosstab(sub[row_col], sub[col_col])
+        sns.heatmap(ct, annot=True, fmt='d', cmap=cmap, ax=axes[idx], cbar_kws={'label': 'Count'})
+        axes[idx].set_title(f'{group_col} = {gval}')
+        axes[idx].set_xlabel(col_col)
+        axes[idx].set_ylabel(row_col)
+    if suptitle:
+        fig.suptitle(suptitle)
+    plt.tight_layout()
+    return fig
+
+
+def plot_crosstab_heatmap_agg(
+    df: pd.DataFrame,
+    row_col: str,
+    col_col: str,
+    value_col: str,
+    aggfunc: str = 'mean',
+    figsize: Tuple[int, int] = (6, 4),
+    cmap: str = 'YlOrRd',
+    fmt: str = '.2%',
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    title: Optional[str] = None,
+    set_korean_font: bool = True,
+) -> plt.Figure:
+    """
+    row_col × col_col 조합별로 value_col을 aggfunc으로 집계한 heatmap 1개.
+    value_col이 범주형(Yes/No 등)이면 0/1로 변환 후 mean = 비율로 사용 가능.
+    반환: figure.
+    """
+    if set_korean_font:
+        try:
+            from .correlation import _set_korean_font
+            _set_korean_font()
+        except Exception:
+            pass
+    if row_col not in df.columns or col_col not in df.columns or value_col not in df.columns:
+        raise ValueError(f"필요한 컬럼이 없습니다: {row_col}, {col_col}, {value_col}")
+    vals = df[value_col]
+    if not pd.api.types.is_numeric_dtype(vals):
+        vals = (vals.astype(str).str.lower().isin(['yes', 'true', '1'])).astype(int)
+    else:
+        vals = vals.astype(float)
+    ct = pd.crosstab(
+        index=df[row_col],
+        columns=df[col_col],
+        values=vals,
+        aggfunc=aggfunc,
+    )
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(ct, annot=True, fmt=fmt, cmap=cmap, ax=ax, vmin=vmin, vmax=vmax)
+    ax.set_title(title or f'{value_col} by {row_col} × {col_col}')
+    ax.set_xlabel(col_col)
+    ax.set_ylabel(row_col)
+    plt.tight_layout()
+    return fig
 
 
 # 하위 호환성을 위한 별칭
