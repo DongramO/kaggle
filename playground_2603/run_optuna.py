@@ -17,15 +17,13 @@ from prepare_data import prepare_data, get_feature_columns
 
 # ========== 설정 (실행 시 수정) ==========
 DATA_DIR = Path(__file__).parent / "data"
-TARGET_COL = "target"
+TARGET_COL = "Churn"
 ID_COL = "id"
 N_TRIALS = 30
-N_FOLDS = 3
+N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
-
-
-
+MODEL_TYPES = ["lightgbm", "catboost", "xgboost"]
 
 def _get_data():
     """데이터 로드 및 전처리."""
@@ -118,24 +116,21 @@ def create_objective_xgb(X, y):
     return objective
 
 
-# 모델별 Optuna objective 및 저장 시 추가할 고정 옵션(GPU/로그)
-OBJECTIVES = {
-    "lightgbm": (create_objective_lgbm, {"verbosity": -1, "device": "gpu"}),
-    "catboost": (create_objective_catboost, {"verbose": 0, "task_type": "GPU"}),
-    "xgboost": (create_objective_xgb, {"verbosity": 0, "tree_method": "hist", "device": "cuda"}),
+# 모델별 Optuna objective 함수만 매핑. GPU/verbose/bootstrap_type 등은 best_hyperparameters.json에서 관리.
+OBJECTIVE_FNS = {
+    "lightgbm": create_objective_lgbm,
+    "catboost": create_objective_catboost,
+    "xgboost": create_objective_xgb,
 }
 
 
-def run_optuna(model_types=None):
-    """Optuna 최적화 실행 및 결과 저장. model_types 미지정 시 lightgbm, catboost, xgboost 모두 실행."""
-    if model_types is None:
-        model_types = ["lightgbm", "catboost", "xgboost"]
-
+def run_optuna():
+    """Optuna 최적화 실행 및 결과 저장. model_types 미지정 시 MODEL_TYPES 사용."""
+    model_types = MODEL_TYPES
     print("데이터 로드 중...")
     X, y = _get_data()
     print(f"X: {X.shape}, y: {y.shape}")
 
-    # 기존 JSON 로드(다른 모델 키 보존)
     if OUTPUT_PATH.exists():
         with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
             all_params = json.load(f)
@@ -143,17 +138,19 @@ def run_optuna(model_types=None):
         all_params = {}
 
     for model_type in model_types:
-
-        obj_fn, extra = OBJECTIVES[model_type]
+        if model_type not in OBJECTIVE_FNS:
+            print(f"건너뜀(미지원): {model_type}")
+            continue
+        obj_fn = OBJECTIVE_FNS[model_type]
         print(f"\n=== {model_type} Optuna 시작 (n_trials={N_TRIALS}) ===")
         study = optuna.create_study(
             direction="maximize",
             sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE, n_startup_trials=5),
         )
         study.optimize(obj_fn(X, y), n_trials=N_TRIALS, show_progress_bar=True)
-        best = dict(study.best_params)
-        best.update(extra)
-        all_params[model_type] = best
+        # 기존 JSON 값(bootstrap_type, task_type 등) 유지하고 Optuna 결과만 갱신
+        existing = all_params.get(model_type, {})
+        all_params[model_type] = {**existing, **study.best_params}
         print(f"{model_type} Best AUC: {study.best_value:.4f}")
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:

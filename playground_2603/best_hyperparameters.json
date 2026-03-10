@@ -1,53 +1,52 @@
 {
-    "mlp": {
-        "hidden_layer_sizes": [
-            443,
-            134
-        ],
-        "max_iter": 610,
-        "learning_rate_init": 0.00012487569657215525,
-        "alpha": 0.005094984347926748,
-        "early_stopping": true,
-        "validation_fraction": 0.06851313876796598
-    },
-    "catboost": {
-        "bootstrap_type": "Bernoulli",
-        "iterations": 1907,
-        "learning_rate": 0.039895378829069836,
-        "depth": 5,
-        "l2_leaf_reg": 8.057252489195191,
-        "random_strength": 1.1451054700100052,
-        "min_data_in_leaf": 43,
-        "subsample": 0.8745089713706511,
-        "verbose": 0,
-        "task_type": "GPU"
-    },
-    "lightgbm": {
-        "n_estimators": 1650,
-        "num_leaves": 174,
-        "learning_rate": 0.042889433298073536,
-        "max_depth": 3,
-        "min_data_in_leaf": 23,
-        "feature_fraction": 0.5167929424672362,
-        "bagging_fraction": 0.9938586044559388,
-        "bagging_freq": 6,
-        "lambda_l1": 9.115516553433872,
-        "lambda_l2": 0.43996983454557664,
-        "verbose": -1,
-        "device": "gpu"
-    },
-    "xgboost": {
-        "n_estimators": 1070,
-        "max_depth": 6,
-        "learning_rate": 0.018965996720683873,
-        "min_child_weight": 18,
-        "subsample": 0.6580601718218131,
-        "colsample_bytree": 0.5128496667745931,
-        "gamma": 0.8884503905854318,
-        "reg_alpha": 9.939265992139198,
-        "reg_lambda": 9.729721222254168,
-        "verbosity": 0,
-        "tree_method": "hist",
-        "device": "cuda"
-    }
+  "mlp": {
+    "hidden_layer_sizes": [
+      443,
+      134
+    ],
+    "max_iter": 610,
+    "learning_rate_init": 0.00012487569657215525,
+    "alpha": 0.005094984347926748,
+    "early_stopping": true,
+    "validation_fraction": 0.06851313876796598
+  },
+  "catboost": {
+    "iterations": 728,
+    "learning_rate": 0.17178329359598113,
+    "depth": 4,
+    "l2_leaf_reg": 4.605994473159585,
+    "random_strength": 0.033648609147079254,
+    "min_data_in_leaf": 7,
+    "subsample": 0.8100744538922787,
+    "verbose": 0,
+    "task_type": "GPU",
+    "bootstrap_type": "Bernoulli"
+  },
+  "lightgbm": {
+    "n_estimators": 383,
+    "max_depth": 3,
+    "learning_rate": 0.2708160864249968,
+    "num_leaves": 129,
+    "min_child_samples": 25,
+    "subsample": 0.5909124836035503,
+    "colsample_bytree": 0.5917022549267169,
+    "reg_alpha": 0.016480446427978974,
+    "reg_lambda": 0.12561043700013558,
+    "verbosity": -1,
+    "device": "gpu"
+  },
+  "xgboost": {
+    "n_estimators": 459,
+    "max_depth": 4,
+    "learning_rate": 0.1592172820823658,
+    "min_child_weight": 18,
+    "subsample": 0.6932471860475873,
+    "colsample_bytree": 0.9971411905468941,
+    "gamma": 0.05501747274603936,
+    "reg_alpha": 0.005104462494641908,
+    "reg_lambda": 1.7020266541479079,
+    "verbosity": 0,
+    "tree_method": "hist",
+    "device": "cuda"
+  }
 }
