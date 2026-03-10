@@ -1,39 +1,50 @@
 {
   "task_type": "classification",
-  "timestamp": "2026-03-03 10:37:37",
+  "timestamp": "2026-03-10 05:26:17",
   "hyperparameters": {
+    "mlp": {
+      "hidden_layer_sizes": [
+        443,
+        134
+      ],
+      "max_iter": 610,
+      "learning_rate_init": 0.00012487569657215525,
+      "alpha": 0.005094984347926748,
+      "early_stopping": true,
+      "validation_fraction": 0.06851313876796598
+    },
     "catboost": {
-      "bootstrap_type": "Bayesian",
-      "iterations": 2044,
-      "learning_rate": 0.11306809761191138,
-      "depth": 4,
-      "l2_leaf_reg": 9.547071874488308,
-      "random_strength": 0.9516037649673834,
-      "min_data_in_leaf": 183,
-      "bagging_temperature": 0.6805845132422833
+      "bootstrap_type": "Bernoulli",
+      "iterations": 1907,
+      "learning_rate": 0.039895378829069836,
+      "depth": 5,
+      "l2_leaf_reg": 8.057252489195191,
+      "random_strength": 1.1451054700100052,
+      "min_data_in_leaf": 43,
+      "subsample": 0.8745089713706511
     },
     "lightgbm": {
-      "bagging_fraction": 0.874496735684752,
-      "bagging_freq": 1,
-      "feature_fraction": 0.5043469320106614,
-      "lambda_l1": 9.834612983658072,
-      "lambda_l2": 0.3128483848485003,
-      "learning_rate": 0.011913721143115499,
-      "max_depth": 11,
-      "min_data_in_leaf": 195,
-      "n_estimators": 1704,
-      "num_leaves": 67
+      "n_estimators": 1650,
+      "num_leaves": 174,
+      "learning_rate": 0.042889433298073536,
+      "max_depth": 3,
+      "min_data_in_leaf": 23,
+      "feature_fraction": 0.5167929424672362,
+      "bagging_fraction": 0.9938586044559388,
+      "bagging_freq": 6,
+      "lambda_l1": 9.115516553433872,
+      "lambda_l2": 0.43996983454557664
     },
     "xgboost": {
-      "colsample_bytree": 0.532133824277049,
-      "gamma": 0.17722614926562846,
-      "learning_rate": 0.0466148350609317,
-      "max_depth": 4,
-      "min_child_weight": 10,
-      "n_estimators": 1800,
-      "reg_alpha": 0.004152453341754333,
-      "reg_lambda": 0.008688435767098723,
-      "subsample": 0.7467813979547293
+      "n_estimators": 1070,
+      "max_depth": 6,
+      "learning_rate": 0.018965996720683873,
+      "min_child_weight": 18,
+      "subsample": 0.6580601718218131,
+      "colsample_bytree": 0.5128496667745931,
+      "gamma": 0.8884503905854318,
+      "reg_alpha": 9.939265992139198,
+      "reg_lambda": 9.729721222254168
     }
   },
   "additional_info": {
@@ -44,6 +55,6 @@
     "use_gpu": true,
     "target_col": "Churn",
     "params_filepath": "C:\\Users\\30032\\OneDrive\\바탕 화면\\workspace\\kaggle\\202603_playground\\best_hyperparameters.json",
-    "optuna_sample_size": null
+    "optuna_sample_size": 100000
   }
 }

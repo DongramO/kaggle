@@ -1,35 +1,36 @@
 ﻿Feature,Importance,Std
-Contract_numeric,0.031849903,0.001026083
-tenure,0.023218123,0.001258119
-TotalCharges_tenure_ratio,0.021338912,0.002190315
-Contract_encoded,0.003773319,0.000518386
-InternetService_Fiber optic_encoded,0.003664734,0.001271321
-InternetService_Fiber optic_encoded_x_MonthlyCharges_FE,0.003018017,0.001006826
-PaymentMethod_Electronic check_encoded,0.002681093,0.000116418
-MonthlyCharges,0.002675313,0.000333025
-TotalCharges,0.00249405,0.000241414
-MonthlyCharges_TotalCharges_ratio,0.002324031,0.000112387
-PaperlessBilling_encoded,0.002123455,3.46E-05
-tenure_MonthlyCharges_mean,0.001734423,0.000339689
-tenure_Contract_numeric_ratio,0.001602096,7.53E-05
-MultipleLines_numeric,0.001538946,0.000108216
-OnlineSecurity_numeric,0.001356737,1.69E-05
-PhoneService_encoded,0.000773124,4.82E-05
-StreamingTV_numeric,0.000744552,4.86E-05
-high_risk_combo,0.000726579,5.58E-05
-StreamingMovies_numeric,0.000629871,9.91E-05
-TechSupport_numeric,0.000530449,1.01E-05
-has_internet,0.000518476,8.95E-05
-Dependents_numeric_x_MonthlyCharges_FE,0.00041334,4.75E-05
-Dependents_numeric,0.000371296,5.26E-05
-InternetService_No_encoded_x_MonthlyCharges_FE,0.000353449,0.000101194
-OnlineBackup_numeric,0.000338558,1.56E-05
-SeniorCitizen,0.000296725,4.08E-05
-DeviceProtection_numeric,0.000284536,2.79E-05
-SeniorCitizen_x_MonthlyCharges_FE,0.000274253,3.40E-05
-PaymentMethod_Mailed check_encoded,0.000127285,2.39E-05
-SeniorCitizen_tenure_FE,0.000113422,1.76E-05
-InternetService_No_encoded,0.000108623,3.11E-05
-Partner_numeric,6.13E-05,7.33E-06
-gender_Male_encoded,5.89E-05,5.49E-06
-PaymentMethod_Credit card (automatic)_encoded,5.54E-05,9.92E-06
+tenure,0.04828335350312234,0.0028559449221096803
+Contract_numeric,0.03237247369076425,0.009815068805128216
+MonthlyCharges,0.01373491857502982,0.00229073833417414
+TotalCharges,0.013031442119189432,0.0016793082699735201
+tenure_Contract_numeric_ratio,0.013005775200782665,0.0020127809003604555
+TotalCharges_MonthlyCharges_x_Contract_numeric_FE_ratio,0.006773565821345801,0.0011705287990976803
+MonthlyCharges_x_Contract_numeric_FE,0.00632018465301179,0.0012893936276055767
+is_month_to_month_x_payment_method_electronic_check,0.002649990899889565,0.00017362467127381094
+has_internet,0.0024618008259490853,0.0002685653265575369
+PaperlessBilling_Yes_encoded,0.0021921994769764086,3.3174094393350745e-05
+Contract_numeric_inv,0.001990022370322211,0.00020631775333949522
+PaymentMethod_Electronic check_encoded,0.001609084075932525,0.00010321223978521538
+Dependents_Yes_encoded,0.0014004451900405314,3.337340975881811e-05
+PhoneService_Yes_encoded,0.001233574824485739,6.581084010136362e-05
+MultipleLines_numeric,0.0011988950642215746,4.725117765486992e-05
+OnlineSecurity_numeric,0.0005891063272261476,4.952613836067581e-05
+TechSupport_numeric,0.0005211759016814787,7.902338729277587e-05
+has_internet_x_OnlineSecurity_numeric_FE,0.0003522306985808088,3.646270095591643e-05
+OnlineBackup_numeric,0.00032158832938096183,2.072193073019745e-05
+SeniorCitizen_MonthlyCharges_FE,0.0002954015874153804,1.8325590165139606e-05
+DeviceProtection_numeric,0.00029023078913261943,3.127774056848838e-05
+StreamingTV_numeric,0.00022650744907079856,1.2204462432880417e-05
+SeniorCitizen_Dependents_Yes_FE,0.00022167553789051333,2.8751355041546052e-05
+StreamingMovies_numeric,0.0002038601796866257,2.3843080386145554e-05
+PaymentMethod_Mailed check_encoded,0.00019361067066494988,1.971343873318674e-05
+Partner_Yes_encoded,0.00011410288616844566,7.266626104567078e-06
+PaymentMethod_Credit card (automatic)_encoded,0.00011208572424649121,1.5154602368577265e-05
+gender_Male_encoded,0.00011081479855564735,3.360016177130414e-06
+has_internet_x_DeviceProtection_numeric_FE,9.822185692033747e-05,9.909962261136034e-06
+SeniorCitizen,9.497550710533265e-05,2.6534473624937315e-05
+has_internet_x_OnlineBackup_numeric_FE,8.6064162548527e-05,1.304338959326373e-05
+has_internet_x_TechSupport_numeric_FE,8.480660497772742e-05,2.289672313737524e-05
+has_internet_x_StreamingMovies_numeric_FE,8.029252914626193e-05,1.737819615662555e-05
+has_internet_x_StreamingTV_numeric_FE,7.47090048469845e-05,1.4648436613848445e-05
+SeniorCitizen_Partner_Yes_FE,3.9139425236798254e-05,8.178717771505135e-06

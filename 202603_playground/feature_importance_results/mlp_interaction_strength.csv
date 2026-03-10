@@ -1,0 +1,51 @@
+﻿Feature_i,Feature_j,InteractionStrength,Rank
+Contract_numeric,Contract_Two year_encoded,12.663967925145428,1
+Contract_Two year_encoded,Contract_numeric,12.663967925145428,2
+tenure_log,Contract_numeric,12.219478360618425,3
+Contract_numeric,tenure_log,12.219478360618425,4
+InternetService_Fiber optic_encoded,tenure_log,11.983495577658969,5
+tenure_log,InternetService_Fiber optic_encoded,11.983495577658969,6
+tenure_log,TotalCharges,11.90959419104327,7
+TotalCharges,tenure_log,11.90959419104327,8
+tenure_MonthlyCharges_mean,tenure_log,11.77619354303306,9
+tenure_log,tenure_MonthlyCharges_mean,11.77619354303306,10
+tenure_log,Contract_Two year_encoded,11.76460033960466,11
+Contract_Two year_encoded,tenure_log,11.76460033960466,12
+tenure,tenure_log,11.581934318955089,13
+tenure_log,tenure,11.581934318955089,14
+MultipleLines_Yes_encoded,tenure_log,11.558988690808626,15
+tenure_log,MultipleLines_Yes_encoded,11.558988690808626,16
+StreamingMovies_Yes_encoded,tenure_log,11.348324757733018,17
+tenure_log,StreamingMovies_Yes_encoded,11.348324757733018,18
+DeviceProtection_Yes_encoded,tenure_log,10.74439754998207,19
+tenure_log,DeviceProtection_Yes_encoded,10.74439754998207,20
+TotalCharges,tenure_MonthlyCharges_mean,10.557342277964738,21
+tenure_MonthlyCharges_mean,TotalCharges,10.557342277964738,22
+tenure_log,TechSupport_Yes_encoded,10.372528708698113,23
+TechSupport_Yes_encoded,tenure_log,10.372528708698113,24
+PaperlessBilling_Yes_encoded,tenure_log,10.339120145003832,25
+tenure_log,PaperlessBilling_Yes_encoded,10.339120145003832,26
+StreamingTV_Yes_encoded,tenure_log,10.281845855636151,27
+tenure_log,StreamingTV_Yes_encoded,10.281845855636151,28
+Contract_numeric,MultipleLines_Yes_encoded,10.19870850136921,29
+MultipleLines_Yes_encoded,Contract_numeric,10.19870850136921,30
+OnlineSecurity_Yes_encoded,tenure_log,10.034696070841512,31
+tenure_log,OnlineSecurity_Yes_encoded,10.034696070841512,32
+MultipleLines_Yes_encoded,Contract_Two year_encoded,9.865272548564837,33
+Contract_Two year_encoded,MultipleLines_Yes_encoded,9.865272548564837,34
+Contract_One year_encoded,tenure_log,9.829366341178398,35
+tenure_log,Contract_One year_encoded,9.829366341178398,36
+OnlineBackup_Yes_encoded,tenure_log,9.780709584108969,37
+tenure_log,OnlineBackup_Yes_encoded,9.780709584108969,38
+Dependents_Yes_encoded,tenure_log,9.705901705412732,39
+tenure_log,Dependents_Yes_encoded,9.705901705412732,40
+tenure_log,PaymentMethod_Mailed check_encoded,9.57486133006228,41
+PaymentMethod_Mailed check_encoded,tenure_log,9.57486133006228,42
+Contract_numeric,StreamingMovies_Yes_encoded,9.556223669964266,43
+StreamingMovies_Yes_encoded,Contract_numeric,9.556223669964266,44
+MonthlyCharges_x_tenure_FE,tenure_log,9.532612767661817,45
+tenure_log,MonthlyCharges_x_tenure_FE,9.532612767661817,46
+PaymentMethod_Electronic check_encoded,tenure_log,9.259280111035313,47
+tenure_log,PaymentMethod_Electronic check_encoded,9.259280111035313,48
+StreamingMovies_Yes_encoded,Contract_Two year_encoded,9.252507650857435,49
+Contract_Two year_encoded,StreamingMovies_Yes_encoded,9.252507650857435,50

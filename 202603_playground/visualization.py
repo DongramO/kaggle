@@ -19,6 +19,8 @@ from common.eda.visualization import (
     plot_categorical,
     plot_histogram_by_group,
     plot_boxplot_by_group,
+    plot_crosstab_heatmap_by_group,
+    plot_crosstab_heatmap_agg,
 )
 from common.eda.correlation import (
     calculate_correlation_matrix,
@@ -134,10 +136,10 @@ def run_eda_visualization(
     plt.close(fig)
 
     fig, stats = plot_histogram_by_group(
-        df, value_col=target_col, group_col='InternetService',
+        df, value_col='Contract_numeric', group_col=target_col,
         config=PlotConfig(),
     )
-    fig.savefig('eda_results/internet_service_by_churn.png', dpi=150, bbox_inches='tight')
+    fig.savefig('eda_results/contract_by_churn2.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
     fig, stats = plot_histogram_by_group(
@@ -145,60 +147,6 @@ def run_eda_visualization(
         config=PlotConfig(),
     )
     fig.savefig('eda_results/monthly_charges_by_churn2.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col='TotalCharges', group_col=target_col,
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/total_charges_by_churn2.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col='Partner_numeric', group_col='SeniorCitizen',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/partner_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col='Dependents_numeric', group_col='SeniorCitizen',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/dependents_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col='MonthlyCharges', group_col='Dependents_numeric',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/MonthlyCharges_by_Dependents.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col='MonthlyCharges', group_col='SeniorCitizen',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/monthly_charges_by_SeniorCitizen.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-    fig, stats = plot_histogram_by_group(
-        df, value_col=target_col, group_col='PaymentMethod',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/payment_method_by_churn.png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-
-
-    fig, stats = plot_histogram_by_group(
-        df[df['SeniorCitizen'] == 1],   # 또는 df['SeniorCitizen_numeric'] == 1
-        value_col='MonthlyCharges',
-        group_col='Churn',
-        config=PlotConfig(),
-    )
-    fig.savefig('eda_results/monthly_charges_by_churn_senior_only.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
 
@@ -216,8 +164,47 @@ def run_eda_visualization(
     fig.savefig(os.path.join(output_dir, 'total_charges_by_churn.png'), dpi=150, bbox_inches='tight')
     plt.close(fig)
 
-   
+    # SeniorCitizen × Partner heatmap (Churn 기준, common 함수 재활용)
+    if target_col and target_col in df.columns:
+        partner_col = 'Partner' if 'Partner' in df.columns else 'Partners'
+        if 'SeniorCitizen' in df.columns and partner_col in df.columns:
+            print("📊 SeniorCitizen × Partner heatmap (Churn 기준) 생성 중...")
+            os.makedirs(output_dir, exist_ok=True)
+            try:
+                fig = plot_crosstab_heatmap_by_group(
+                    df, row_col='SeniorCitizen', col_col=partner_col, group_col=target_col,
+                    suptitle='SeniorCitizen × Partner by Churn',
+                )
+                fig.savefig(os.path.join(output_dir, 'senior_partner_heatmap_by_churn.png'), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                fig = plot_crosstab_heatmap_agg(
+                    df, row_col='SeniorCitizen', col_col=partner_col, value_col=target_col,
+                    fmt='.2%', vmin=0, vmax=1, title=f'Churn rate by SeniorCitizen × {partner_col}',
+                )
+                fig.savefig(os.path.join(output_dir, 'senior_partner_churn_rate_heatmap.png'), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except ValueError:
+                pass
 
+    # SeniorCitizen × Dependents heatmap (Churn 기준, common 함수 재활용)
+    if target_col and target_col in df.columns and 'SeniorCitizen' in df.columns and 'Dependents' in df.columns:
+        print("📊 SeniorCitizen × Dependents heatmap (Churn 기준) 생성 중...")
+        os.makedirs(output_dir, exist_ok=True)
+        try:
+            fig = plot_crosstab_heatmap_by_group(
+                df, row_col='SeniorCitizen', col_col='Dependents', group_col=target_col,
+                suptitle='SeniorCitizen × Dependents by Churn',
+            )
+            fig.savefig(os.path.join(output_dir, 'senior_dependents_heatmap_by_churn.png'), dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            fig = plot_crosstab_heatmap_agg(
+                df, row_col='SeniorCitizen', col_col='Dependents', value_col=target_col,
+                fmt='.2%', vmin=0, vmax=1, title='Churn rate by SeniorCitizen × Dependents',
+            )
+            fig.savefig(os.path.join(output_dir, 'senior_dependents_churn_rate_heatmap.png'), dpi=150, bbox_inches='tight')
+            plt.close(fig)
+        except ValueError:
+            pass
 
     # Categorical
     if categorical_cols:
