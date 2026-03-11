@@ -19,7 +19,7 @@
     "min_data_in_leaf": 7,
     "subsample": 0.8100744538922787,
     "verbose": 0,
-    "task_type": "GPU",
+    "task_type": "CPU",
     "bootstrap_type": "Bernoulli"
   },
   "lightgbm": {
@@ -33,7 +33,7 @@
     "reg_alpha": 0.016480446427978974,
     "reg_lambda": 0.12561043700013558,
     "verbosity": -1,
-    "device": "gpu"
+    "device": "cpu"
   },
   "xgboost": {
     "n_estimators": 459,
@@ -47,6 +47,6 @@
     "reg_lambda": 1.7020266541479079,
     "verbosity": 0,
     "tree_method": "hist",
-    "device": "cuda"
+    "device": "cpu"
   }
 }

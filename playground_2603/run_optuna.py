@@ -19,7 +19,7 @@ from prepare_data import prepare_data, get_feature_columns
 DATA_DIR = Path(__file__).parent / "data"
 TARGET_COL = "Churn"
 ID_COL = "id"
-N_TRIALS = 30
+N_TRIALS = 50
 N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
@@ -27,13 +27,8 @@ MODEL_TYPES = ["lightgbm", "catboost", "xgboost"]
 
 def _get_data():
     """데이터 로드 및 전처리."""
-    train_df, _, _ = load_all(DATA_DIR)
-    train_prepared = prepare_data(train_df, target_col=TARGET_COL)
-    feature_cols = get_feature_columns(train_prepared, target_col=TARGET_COL, id_col=ID_COL)
-
-    X = train_prepared[feature_cols]
-    y = train_prepared[TARGET_COL]
-
+    train_df, test_df, _ = load_all(DATA_DIR)
+    X, y, _ = prepare_data(train_df, test_df, target_col=TARGET_COL)
     return X, y
 
 
@@ -44,10 +39,9 @@ def create_objective_lgbm(X, y):
         import lightgbm as lgb
 
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 500),
-            "max_depth": trial.suggest_int("max_depth", 3, 12),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "num_leaves": trial.suggest_int("num_leaves", 20, 150),
+            "n_estimators": trial.suggest_int("n_estimators", 200, 800),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.5, log=True),
+            "num_leaves": trial.suggest_int("num_leaves", 20, 200),
             "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
@@ -96,13 +90,13 @@ def create_objective_xgb(X, y):
         import xgboost as xgb
 
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 500),
-            "max_depth": trial.suggest_int("max_depth", 3, 12),
+            "n_estimators": trial.suggest_int("n_estimators", 200, 800),
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
             "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "gamma": trial.suggest_float("gamma", 1e-6, 5.0, log=True),
+            "gamma": trial.suggest_float("gamma", 0.0, 1.0),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
             "random_state": RANDOM_STATE,
