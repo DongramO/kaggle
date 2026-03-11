@@ -7,7 +7,7 @@ from pathlib import Path
 import json
 
 from data_loader import load_all
-from prepare_data import prepare_data, get_feature_columns
+from prepare_data import prepare_data, get_feature_columns, filter_correlated_features
 from modeling import run_ensemble_models
 
 def main(
@@ -25,7 +25,15 @@ def main(
     # 2. prepare_data
     train_prepared = prepare_data(train_df, target_col=target_col)
     test_prepared = prepare_data(test_df, target_col=target_col)
+    drop_cols = filter_correlated_features(train_prepared, target_col=target_col)
+    
+    train_prepared.drop(columns=drop_cols)
+    test_prepared.drop(columns=drop_cols)
+    
     feature_cols = get_feature_columns(train_prepared, target_col=target_col, id_col=id_col)
+
+    print(train_prepared.columns)
+
     # 학습/평가/예측용 데이터
     X = train_prepared[feature_cols]
     y = train_prepared[target_col]

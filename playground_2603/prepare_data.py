@@ -90,7 +90,7 @@ def prepare_data(df: pd.DataFrame, target_col: str | None = None) -> pd.DataFram
         df_cp = label_encoding(df_cp, target_cols=[target_col])
 
     # 7단계: 상관 분석 기반 특성 필터링
-    df_cp = filter_correlated_features(df_cp, target_col=target_col)
+    # df_cp = filter_correlated_features(df_cp, target_col=target_col)
 
     return df_cp
 
@@ -191,7 +191,7 @@ def filter_correlated_features(
         save_dir=save_dir,
     )
     drop_cols = [c for c in result['drop_candidates'] if c in df.columns]
-    return df.drop(columns=drop_cols)
+    return drop_cols
 
 
 def target_encoding(df: pd.DataFrame, target_cols: list[str] | None = None, target_col: str | None = None) -> pd.DataFrame:
