@@ -331,7 +331,8 @@ def run_stacking_ensemble(
         best_params = best_params_dict[model_type]
         fi_sum = np.zeros(len(feature_names))
 
-        for train_idx, valid_idx in skf.split(X, y):
+        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+            print(f"  [{model_type}] fold {fold_i}/{n_folds} 학습 중...", flush=True)
             X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
             y_tr, _ = y.iloc[train_idx], y.iloc[valid_idx]
 
@@ -351,7 +352,8 @@ def run_stacking_ensemble(
 
     # --- Level 0: MLP ---
     if use_mlp:
-        for train_idx, valid_idx in skf.split(X, y):
+        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+            print(f"  [mlp] fold {fold_i}/{n_folds} 학습 중...", flush=True)
             X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
             y_tr, _ = y.iloc[train_idx], y.iloc[valid_idx]
 
@@ -365,7 +367,8 @@ def run_stacking_ensemble(
 
     # --- Level 0: TabNet ---
     if use_tabnet:
-        for train_idx, valid_idx in skf.split(X, y):
+        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+            print(f"  [tabnet] fold {fold_i}/{n_folds} 학습 중...", flush=True)
             X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
             y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
 
@@ -401,15 +404,15 @@ def run_stacking_ensemble(
             print(fi_df.head(20).to_string(index=False))
         plot_feature_importance(fi_accumulator, top_n=30, save_path="feature_importance.png")
 
-    # MLP permutation importance & 비선형 패턴 분석
-    if use_mlp and last_mlp_model is not None:
-        analyze_mlp_permutation_importance(
-            mlp=last_mlp_model,
-            scaler=last_mlp_scaler,
-            X_val=X.iloc[last_val_idx],
-            y_val=y.iloc[last_val_idx],
-            tree_fi_dict=fi_accumulator,
-            save_path="mlp_vs_tree_importance.png",
-        )
+    final_pred = meta_model.predict_proba(meta_X_test)[:, 1]
 
-    return meta_model.predict_proba(meta_X_test)[:, 1]
+    mlp_artifacts = None
+    if use_mlp and last_mlp_model is not None:
+        mlp_artifacts = {
+            "mlp": last_mlp_model,
+            "scaler": last_mlp_scaler,
+            "val_idx": last_val_idx,
+            "fi_accumulator": fi_accumulator,
+        }
+
+    return final_pred, mlp_artifacts
