@@ -63,6 +63,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     eps = 1e-6
     X = df.copy()
 
+    # --- 기존 ---
     X['avg_monthly_charge'] = X['TotalCharges'] / (X['tenure'] + eps)
     X['charge_increase'] = X['MonthlyCharges'] - X['avg_monthly_charge']
     X['streaming_count'] = X['StreamingTV'] + X['StreamingMovies']
@@ -71,6 +72,27 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     X['is_new_customer'] = (X['tenure'] <= 6).astype(int)
     X['monthly_charge_per_service'] = X['MonthlyCharges'] / (X['total_services'] + 1)
     X['charge_consistency'] = X['TotalCharges'] / (X['MonthlyCharges'] * X['tenure'] + eps)
+
+    # --- 계약×비용 관점 ---
+    # log 보정 비용 부담: tenure가 짧을수록 월 비용 부담이 가파르게 증가
+    X['charge_per_log_tenure'] = X['MonthlyCharges'] / np.log1p(X['tenure'])
+    # tenure 구간: 0=신규(≤6), 1=중기(≤24), 2=장기(24+)
+    X['tenure_segment'] = pd.cut(
+        X['tenure'], bins=[-1, 6, 24, float('inf')], labels=[0, 1, 2]
+    ).astype(int)
+
+    # --- 사람 관점 ---
+    # 가족 안정성 합산 (0~2)
+    X['family_stability'] = X['Partner'] + X['Dependents']
+
+    # --- 비선형 interaction (MLP 분석 기반) ---
+    # Contract 인코딩: Month-to-month=0, One year=1, Two year=2 (ordinal 순서와 동일)
+    contract_map = {'Month-to-month': 0, 'One year': 1, 'Two year': 2}
+    contract_numeric = X['Contract'].map(contract_map).fillna(0)
+    # Contract × charge_per_log_tenure: 단기계약 + 높은 비용부담 = 강한 이탈 시그널
+    X['contract_x_charge_log'] = contract_numeric * X['charge_per_log_tenure']
+    # Contract × avg_monthly_charge: 계약 유형별 평균 비용 수준 조합
+    X['contract_x_avg_charge'] = contract_numeric * X['avg_monthly_charge']
 
     return X
 

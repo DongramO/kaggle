@@ -8,7 +8,7 @@ import json
 
 from data_loader import load_all
 from prepare_data import prepare_data, get_feature_columns, filter_correlated_features
-from modeling import run_ensemble_models
+from modeling import run_ensemble_models, run_stacking_ensemble
 
 def main(
     data_dir: str | Path = "data",
@@ -33,14 +33,14 @@ def main(
         best = json.load(f)
     model_types = ["catboost", "lightgbm", "xgboost"]
 
-    # 4. modeling: 모델별 학습 + 테스트 예측 앙상블
-    ensemble_pred = run_ensemble_models(
+    # 4. modeling: 스태킹 앙상블 (Level0: tree+MLP, Level1: LogisticRegression)
+    ensemble_pred = run_stacking_ensemble(
         X=X,
         y=y,
         X_test=X_test,
         best_params_dict=best,
         model_types=model_types,
-        weights=None,
+        use_mlp=True,
     )
     submission_df[target_col] = ensemble_pred
     submission_df.to_csv("submission_ensemble.csv", index=False)
