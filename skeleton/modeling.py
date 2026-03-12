@@ -94,7 +94,7 @@ def run_ensemble_models(
         print(f"{model_type} OOF AUC: {auc_score:.4f}")
 
         if use_auc_weights:
-            w = max(1e-6, auc_score)
+            w = max(1e-6, auc_score - 0.5)  # 0.5 초과분 기준으로 차이 반영
             weights[model_type] = w
         else:
             w = weights.get(model_type, 1.0)

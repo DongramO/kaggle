@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 import optuna
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 
 from data_loader import load_all
@@ -49,10 +49,12 @@ def create_objective_lgbm(X, y):
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
             "random_state": RANDOM_STATE,
             "verbosity": -1,
+            "device": "gpu",
         }
 
+        cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
         model = lgb.LGBMClassifier(**params)
-        scores = cross_val_score(model, X, y, cv=N_FOLDS, scoring="roc_auc", n_jobs=-1)
+        scores = cross_val_score(model, X, y, cv=cv, scoring="roc_auc", n_jobs=1)
         return scores.mean()
 
     return objective
@@ -74,10 +76,13 @@ def create_objective_catboost(X, y):
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "random_state": RANDOM_STATE,
             "verbose": 0,
+            "task_type": "GPU",
+            "bootstrap_type": "Bernoulli",
         }
 
+        cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
         model = CatBoostClassifier(**params)
-        scores = cross_val_score(model, X, y, cv=N_FOLDS, scoring="roc_auc", n_jobs=-1)
+        scores = cross_val_score(model, X, y, cv=cv, scoring="roc_auc", n_jobs=1)
         return scores.mean()
 
     return objective
@@ -101,10 +106,13 @@ def create_objective_xgb(X, y):
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
             "random_state": RANDOM_STATE,
             "verbosity": 0,
+            "tree_method": "hist",
+            "device": "cuda",
         }
 
+        cv = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
         model = xgb.XGBClassifier(**params)
-        scores = cross_val_score(model, X, y, cv=N_FOLDS, scoring="roc_auc", n_jobs=-1)
+        scores = cross_val_score(model, X, y, cv=cv, scoring="roc_auc", n_jobs=1)
         return scores.mean()
 
     return objective
