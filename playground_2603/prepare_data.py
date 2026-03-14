@@ -4,7 +4,8 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import StratifiedKFold
 from eda import correlation_analysis
 
-ONEHOT_COLS = ['gender', 'PaymentMethod', 'InternetService']
+ONEHOT_COLS = ['PaymentMethod', 'InternetService']
+DROP_COLS   = ['gender']   # permutation importance 낮음
 
 ORDINAL_COLS = {
     'Contract': ['Month-to-month', 'One year', 'Two year'],
@@ -16,14 +17,14 @@ FE_FLAGS_PER_MODEL = {
         "charge_per_log_tenure":      True,
         "contract_x_avg_charge":      True,
         "contract_x_charge_log":      True,
-        "fiber_x_echeck":             True,
-        "contract_x_fiber":           True,
+        "fiber_x_echeck":             False,   # perm 낮음
+        "contract_x_fiber":           False,   # perm 낮음
         "senior_x_monthly":           False,
         # 신규 후보
         "total_services":             False,
         "tenure_bin":                 False,
         "loyalty_score":              False,
-        "charge_per_service":         True,
+        "charge_per_service":         False,   # perm 낮음
         "no_support":                 False,
         "partner_x_dependents":       False,
     },
@@ -36,7 +37,7 @@ FE_FLAGS_PER_MODEL = {
         "charge_ratio":               False,
         "tenure_x_avg_charge":        False,
         # 신규 후보
-        "total_services":             True,
+        "total_services":             False,   # perm 낮음
         "tenure_bin":                 False,
         "loyalty_score":              False,
         "charge_per_service":         False,
@@ -46,14 +47,14 @@ FE_FLAGS_PER_MODEL = {
     "xgboost": {
         "high_risk_combo":               True,
         "contract_x_electronic_check":   True,
-        "fiber_x_paperless":             True,
+        "fiber_x_paperless":             False,  # perm 낮음
         "streaming_count":               True,
         "mtm_x_fiber":                   True,
         "mtm_x_echeck":                  True,
         "senior_x_fiber":                False,
         "no_security_x_fiber":           False,
         # 신규 후보
-        "total_services":                True,
+        "total_services":                False,  # perm 낮음
         "tenure_bin":                    False,
         "loyalty_score":                 False,
         "charge_per_service":            False,
@@ -86,8 +87,8 @@ def prepare_data(
     test = test_df.copy()
 
     for df in [train, test]:
-        if 'id' in df.columns:
-            df.drop(columns=['id'], inplace=True)
+        drop = ['id'] + [c for c in DROP_COLS if c in df.columns]
+        df.drop(columns=drop, inplace=True)
 
     y_train = train.pop(target_col)
     le = LabelEncoder()

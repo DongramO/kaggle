@@ -23,7 +23,7 @@ N_TRIALS = 30
 N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
-MODEL_TYPES = ["catboost", "lightgbm", "xgboost"]
+MODEL_TYPES = ["xgboost"]
 
 
 def _get_data(model_type: str):
@@ -109,21 +109,20 @@ def create_objective_xgb(X, y):
         import xgboost as xgb
 
         params = {
-            # FE 피처 추가로 특성 수 증가 → reg_alpha/lambda 전반적 상향
-            # reg_alpha: 0.10 → 하한 0.5로 상향 (L1 희소성 강화)
-            # reg_lambda: 0.16 → 하한 1.0으로 상향 (L2 정규화 강화)
-            # gamma: 가지치기 강도 하한 0.5로 상향
-            # min_child_weight: 하한 10으로 상향 → 작은 노드 방지
-            # max_depth: 상한 5로 축소
+            # gap +0.0042 확인 → 정규화 강화 목적으로 탐색 범위 하한 상향
+            # max_depth: 상한 4로 축소 (depth 5는 과적합 유발)
+            # gamma: 하한 1.0으로 상향 (가지치기 강화)
+            # reg_alpha: 하한 1.0으로 상향 (L1 희소성 강화)
+            # min_child_weight: 하한 15로 상향 (작은 노드 방지)
             "n_estimators":      trial.suggest_int("n_estimators", 500, 1500),
-            "max_depth":         trial.suggest_int("max_depth", 3, 5),
+            "max_depth":         trial.suggest_int("max_depth", 3, 4),
             "learning_rate":     trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-            "min_child_weight":  trial.suggest_int("min_child_weight", 10, 50),
+            "min_child_weight":  trial.suggest_int("min_child_weight", 15, 60),
             "subsample":         trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree":  trial.suggest_float("colsample_bytree", 0.4, 0.9),
             "colsample_bynode":  trial.suggest_float("colsample_bynode", 0.3, 0.8),
-            "gamma":             trial.suggest_float("gamma", 0.5, 10.0, log=True),
-            "reg_alpha":         trial.suggest_float("reg_alpha", 0.5, 20.0, log=True),
+            "gamma":             trial.suggest_float("gamma", 1.0, 10.0, log=True),
+            "reg_alpha":         trial.suggest_float("reg_alpha", 1.0, 20.0, log=True),
             "reg_lambda":        trial.suggest_float("reg_lambda", 1.0, 20.0, log=True),
             "monotone_constraints": monotone_constraints,
             "random_state": RANDOM_STATE,
