@@ -14,7 +14,8 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 BASE_DIR = Path(__file__).parent
 FI_HISTORY_PATH = BASE_DIR / "fi_history.json"
-AUC_LOG_PATH = BASE_DIR / "auc_history.json"
+AUC_LOG_PATH    = BASE_DIR / "auc_history.json"
+PERM_FI_PATH    = BASE_DIR / "perm_fi_history.json"
 
 
 def save_auc_log(auc_dict: dict, run_type: str) -> None:
@@ -59,6 +60,35 @@ def save_fi_history(fi_accumulator: dict) -> None:
     with open(FI_HISTORY_PATH, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     print(f"      fi_history saved (total {len(history)} runs): {FI_HISTORY_PATH.name}")
+
+
+def save_perm_fi(perm_fi_accumulator: dict) -> None:
+    """
+    permutation importance 결과를 타임스탬프와 함께 누적 저장.
+    음수 피처(제거 후보)를 별도로 정리해 기록.
+    """
+    history = []
+    if PERM_FI_PATH.exists():
+        with open(PERM_FI_PATH, "r", encoding="utf-8") as f:
+            history = json.load(f)
+
+    entry = {"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "models": {}}
+    for mt, fi_df in perm_fi_accumulator.items():
+        scores = dict(zip(fi_df["feature"], fi_df["importance"].round(6)))
+        remove_candidates = fi_df[fi_df["importance"] <= 0]["feature"].tolist()
+        entry["models"][mt] = {
+            "scores": scores,
+            "remove_candidates": remove_candidates,
+        }
+
+    history.append(entry)
+    with open(PERM_FI_PATH, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+    print(f"\n[Permutation Importance 저장] {PERM_FI_PATH.name}")
+    for mt, data in entry["models"].items():
+        candidates = data["remove_candidates"]
+        print(f"  [{mt}] 제거 후보: {candidates if candidates else '없음'}")
 
 
 def plot_fi_history(top_n: int = 15, save_path: str = "fi_history.png") -> None:

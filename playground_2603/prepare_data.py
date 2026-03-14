@@ -10,25 +10,55 @@ ORDINAL_COLS = {
     'Contract': ['Month-to-month', 'One year', 'Two year'],
 }
 
-TARGET_ENCODING_COLS = []
 
 FE_FLAGS_PER_MODEL = {
     "catboost": {
         "charge_per_log_tenure":      True,
         "contract_x_avg_charge":      True,
         "contract_x_charge_log":      True,
+        "fiber_x_echeck":             True,
+        "contract_x_fiber":           True,
+        "senior_x_monthly":           False,
+        # 신규 후보
+        "total_services":             False,
+        "tenure_bin":                 False,
+        "loyalty_score":              False,
+        "charge_per_service":         True,
+        "no_support":                 False,
+        "partner_x_dependents":       False,
     },
     "lightgbm": {
         "avg_monthly_charge":         True,
         "charge_increase":            True,
         "charge_consistency":         True,
         "security_count":             True,
+        "senior_x_charge_increase":   True,
+        "charge_ratio":               False,
+        "tenure_x_avg_charge":        False,
+        # 신규 후보
+        "total_services":             True,
+        "tenure_bin":                 False,
+        "loyalty_score":              False,
+        "charge_per_service":         False,
+        "no_support":                 False,
+        "partner_x_dependents":       False,
     },
     "xgboost": {
         "high_risk_combo":               True,
         "contract_x_electronic_check":   True,
         "fiber_x_paperless":             True,
         "streaming_count":               True,
+        "mtm_x_fiber":                   True,
+        "mtm_x_echeck":                  True,
+        "senior_x_fiber":                False,
+        "no_security_x_fiber":           False,
+        # 신규 후보
+        "total_services":                True,
+        "tenure_bin":                    False,
+        "loyalty_score":                 False,
+        "charge_per_service":            False,
+        "no_support":                    False,
+        "partner_x_dependents":          False,
     },
 }
 
@@ -65,7 +95,6 @@ def prepare_data(
 
     train, test = _basic_preprocessing(train, test)
     train, test = _direct_mapping(train, test)
-    train, test = _kfold_target_encoding(train, test, TARGET_ENCODING_COLS, y_train)
     train, test = _fit_transform_onehot(train, test)
     train, test = _fit_transform_ordinal(train, test)
 
@@ -165,22 +194,82 @@ def apply_model_fe(X: pd.DataFrame, flags: dict | None = None) -> pd.DataFrame:
         df['contract_x_avg_charge'] = contract_numeric * avg_monthly_charge
 
     # --- XGBoost 전용: 범주형 조합 ---
+    is_mtm    = (df['Contract'] == 0).astype(int)
+    is_echeck = df.get('PaymentMethod_Electronic check', pd.Series(0, index=df.index))
+    is_fiber  = df.get('InternetService_Fiber optic',    pd.Series(0, index=df.index))
+
     if flags.get("high_risk_combo"):
-        is_mtm   = (df['Contract'] == 0).astype(int)
-        is_echeck = df.get('PaymentMethod_Electronic check', pd.Series(0, index=df.index))
-        is_fiber  = df.get('InternetService_Fiber optic',    pd.Series(0, index=df.index))
         df['high_risk_combo'] = is_mtm * is_echeck * is_fiber
 
     if flags.get("contract_x_electronic_check"):
-        is_echeck = df.get('PaymentMethod_Electronic check', pd.Series(0, index=df.index))
         df['contract_x_electronic_check'] = contract_numeric * is_echeck
 
     if flags.get("fiber_x_paperless"):
-        is_fiber = df.get('InternetService_Fiber optic', pd.Series(0, index=df.index))
         df['fiber_x_paperless'] = is_fiber * df['PaperlessBilling']
 
     if flags.get("streaming_count"):
         df['streaming_count'] = df['StreamingTV'] + df['StreamingMovies']
+
+    # XGBoost 신규: 2-way 고위험 조합
+    if flags.get("mtm_x_fiber"):
+        df['mtm_x_fiber'] = is_mtm * is_fiber
+
+    if flags.get("mtm_x_echeck"):
+        df['mtm_x_echeck'] = is_mtm * is_echeck
+
+    if flags.get("senior_x_fiber"):
+        df['senior_x_fiber'] = df['SeniorCitizen'] * is_fiber
+
+    if flags.get("no_security_x_fiber"):
+        df['no_security_x_fiber'] = (1 - df['OnlineSecurity']) * is_fiber
+
+    # --- CatBoost 신규 ---
+    if flags.get("fiber_x_echeck"):
+        df['fiber_x_echeck'] = is_fiber * is_echeck
+
+    if flags.get("contract_x_fiber"):
+        df['contract_x_fiber'] = contract_numeric * is_fiber
+
+    if flags.get("senior_x_monthly"):
+        df['senior_x_monthly'] = df['SeniorCitizen'] * df['MonthlyCharges']
+
+    # --- LightGBM 신규 ---
+    if flags.get("charge_ratio"):
+        # 현재 월비용 / 평균 월비용 → 1보다 크면 비용 증가 추세
+        df['charge_ratio'] = df['MonthlyCharges'] / (avg_monthly_charge + eps)
+
+    if flags.get("senior_x_charge_increase"):
+        df['senior_x_charge_increase'] = df['SeniorCitizen'] * (df['MonthlyCharges'] - avg_monthly_charge)
+
+    if flags.get("tenure_x_avg_charge"):
+        df['tenure_x_avg_charge'] = np.log1p(df['tenure']) * avg_monthly_charge
+
+    # --- 공통 신규 후보 ---
+    total_services = (
+        df['MultipleLines'] + df['OnlineSecurity'] + df['OnlineBackup'] +
+        df['DeviceProtection'] + df['TechSupport'] + df['StreamingTV'] + df['StreamingMovies']
+    )
+
+    if flags.get("total_services"):
+        df['total_services'] = total_services
+
+    if flags.get("tenure_bin"):
+        # 0: 신규(≤12개월), 1: 중기(13~36개월), 2: 장기(>36개월)
+        df['tenure_bin'] = pd.cut(
+            df['tenure'], bins=[-1, 12, 36, float('inf')], labels=[0, 1, 2]
+        ).astype(float)
+
+    if flags.get("loyalty_score"):
+        df['loyalty_score'] = df['tenure'] * contract_numeric
+
+    if flags.get("charge_per_service"):
+        df['charge_per_service'] = df['MonthlyCharges'] / (total_services + 1)
+
+    if flags.get("no_support"):
+        df['no_support'] = ((df['OnlineSecurity'] == 0) & (df['TechSupport'] == 0)).astype(int)
+
+    if flags.get("partner_x_dependents"):
+        df['partner_x_dependents'] = df['Partner'] * df['Dependents']
 
     return df
 

@@ -8,7 +8,7 @@ import numpy as np
 import lightgbm as lgb
 import xgboost as xgb
 from catboost import CatBoostClassifier
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.linear_model import LogisticRegression, Ridge, RidgeCV
 from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import StratifiedKFold
@@ -511,6 +511,55 @@ def run_ensemble_models(
     return test_pred_weighted / weight_sum
 
 
+def plot_tree_permutation_importance(
+    perm_fi: dict[str, pd.DataFrame],
+    builtin_fi: dict[str, pd.DataFrame],
+    top_n: int = 30,
+    save_path: str = "permutation_importance.png",
+) -> None:
+    """
+    트리 모델별 permutation importance(val 기준)와 내장 importance 비교 시각화.
+    val AUC 기준이므로 음수 = 해당 피처 제거 시 오히려 성능 향상 → 제거 후보.
+    """
+    model_types = list(perm_fi.keys())
+    fig, axes = plt.subplots(len(model_types), 2, figsize=(16, 6 * len(model_types)))
+    if len(model_types) == 1:
+        axes = [axes]
+
+    print("\n========== Permutation Importance (val 기준) ==========")
+    for i, mt in enumerate(model_types):
+        perm_df = perm_fi[mt].sort_values("importance", ascending=False)
+        print(f"\n[{mt}] Top {top_n}")
+        print(perm_df.head(top_n).to_string(index=False))
+
+        # 음수(해로운 피처) 출력
+        neg = perm_df[perm_df["importance"] < 0]
+        if not neg.empty:
+            print(f"  ⚠ AUC 감소 유발 피처 (제거 후보): {neg['feature'].tolist()}")
+
+        # 왼쪽: permutation importance
+        ax = axes[i][0]
+        top = perm_df.head(top_n)
+        colors = ["steelblue" if v >= 0 else "salmon" for v in top["importance"][::-1]]
+        ax.barh(top["feature"][::-1], top["importance"][::-1], color=colors)
+        ax.axvline(0, color="black", linewidth=0.8)
+        ax.set_title(f"[{mt}] Permutation Importance (val AUC 기준)")
+        ax.set_xlabel("Mean AUC change")
+
+        # 오른쪽: 내장 importance
+        ax = axes[i][1]
+        if mt in builtin_fi:
+            bi = builtin_fi[mt].head(top_n)
+            ax.barh(bi["feature"][::-1], bi["importance"][::-1], color="mediumseagreen")
+            ax.set_title(f"[{mt}] Built-in Importance")
+            ax.set_xlabel("Importance")
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"\n저장: {save_path}")
+
+
 def run_stacking_ensemble(
     X: pd.DataFrame,
     y: pd.Series,
@@ -523,129 +572,165 @@ def run_stacking_ensemble(
     show_feature_importance: bool = True,
     X_per_model: dict[str, pd.DataFrame] | None = None,
     X_test_per_model: dict[str, pd.DataFrame] | None = None,
+    seeds: list[int] = [42],
+    n_folds: int = 5,
+    compute_perm_importance: bool = False,
 ) -> np.ndarray:
     """
-    스태킹 앙상블:
-    - Level 0: CatBoost / LightGBM / XGBoost / MLP / TabNet (OOF 예측)
-    - Level 1: Logistic Regression (메타 모델)
-    MLP permutation importance와 트리 importance 비교로 비선형 패턴 분석.
+    멀티시드 스태킹 앙상블:
+    - Level 0: CatBoost / LightGBM / XGBoost (각 seed × n_folds로 OOF 평균)
+    - Level 1: RidgeCV (alpha 자동 최적화)
     """
-    n_folds = 5
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
-    feature_names = list(X.columns)
-
     neural_types = (["mlp"] if use_mlp else []) + (["tabnet"] if use_tabnet else []) + (["ft_transformer"] if use_ft_transformer else [])
     all_model_types = model_types + neural_types
-    oof_preds = {m: np.zeros(len(X)) for m in all_model_types}
-    test_preds = {m: np.zeros(len(X_test)) for m in all_model_types}
-    fi_accumulator: dict[str, pd.DataFrame] = {}
 
-    # MLP permutation importance용으로 마지막 fold val 보관
+    # 시드별 OOF 누적 (list of arrays → 평균)
+    seeds_oof: dict[str, list[np.ndarray]] = {m: [] for m in all_model_types}
+    test_preds: dict[str, np.ndarray] = {m: np.zeros(len(X_test)) for m in all_model_types}
+    fi_sums: dict[str, np.ndarray] = {}
+    fi_feature_names: dict[str, list[str]] = {}
+    fi_counts: dict[str, int] = {mt: 0 for mt in model_types}
+    perm_fi_sums: dict[str, np.ndarray] = {}
+    perm_fi_counts: dict[str, int] = {mt: 0 for mt in model_types}
+
     last_mlp_model, last_mlp_scaler, last_val_idx = None, None, None
 
-    # --- Level 0: 트리 모델 ---
-    for model_type in model_types:
-        best_params = best_params_dict[model_type]
-        X_m      = X_per_model.get(model_type, X)      if X_per_model      else X
-        X_test_m = X_test_per_model.get(model_type, X_test) if X_test_per_model else X_test
-        model_feature_names = list(X_m.columns)
-        fi_sum = np.zeros(len(model_feature_names))
-        fold_train_aucs, fold_val_aucs = [], []
+    for seed in seeds:
+        print(f"\n{'='*20} Seed {seed} {'='*20}")
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+        seed_oof = {m: np.zeros(len(X)) for m in all_model_types}
 
-        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
-            print(f"  [{model_type}] fold {fold_i}/{n_folds} 학습 중...", flush=True)
-            X_tr, X_val = X_m.iloc[train_idx], X_m.iloc[valid_idx]
-            y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+        # --- Level 0: 트리 모델 ---
+        for model_type in model_types:
+            best_params = best_params_dict[model_type]
+            X_m      = X_per_model.get(model_type, X)           if X_per_model      else X
+            X_test_m = X_test_per_model.get(model_type, X_test) if X_test_per_model else X_test
+            model_feature_names = list(X_m.columns)
 
-            model = train_model(X_tr, y_tr, model_type, best_params)
+            if model_type not in fi_sums:
+                fi_sums[model_type] = np.zeros(len(model_feature_names))
+                fi_feature_names[model_type] = model_feature_names
+                perm_fi_sums[model_type] = np.zeros(len(model_feature_names))
 
-            val_proba = model.predict_proba(X_val)[:, 1]
-            oof_preds[model_type][valid_idx] = val_proba
-            test_preds[model_type] += model.predict_proba(X_test_m)[:, 1] / n_folds
+            fold_train_aucs, fold_val_aucs = [], []
 
-            train_auc = evaluate(y_tr, model.predict_proba(X_tr)[:, 1], metric="auc")
-            val_auc   = evaluate(y_val, val_proba, metric="auc")
-            fold_train_aucs.append(train_auc)
-            fold_val_aucs.append(val_auc)
-            print(f"    train AUC: {train_auc:.4f} | val AUC: {val_auc:.4f} | gap: {train_auc - val_auc:+.4f}")
+            for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+                print(f"  [seed={seed}][{model_type}] fold {fold_i}/{n_folds}", flush=True)
+                X_tr, X_val = X_m.iloc[train_idx], X_m.iloc[valid_idx]
+                y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
 
-            fi_df = get_feature_importance(model, model_feature_names, model_type)
-            if not fi_df.empty:
-                fi_sum += fi_df["importance"].values
+                model = train_model(X_tr, y_tr, model_type, best_params)
+                val_proba = model.predict_proba(X_val)[:, 1]
+                seed_oof[model_type][valid_idx] = val_proba
+                test_preds[model_type] += model.predict_proba(X_test_m)[:, 1] / (n_folds * len(seeds))
 
-        auc_score = evaluate(y, oof_preds[model_type], metric="auc")
-        avg_gap = np.mean(fold_train_aucs) - np.mean(fold_val_aucs)
-        print(f"[Level 0] {model_type} OOF AUC: {auc_score:.4f} | 평균 train-val gap: {avg_gap:+.4f}"
-              + (" ⚠ 과적합 의심" if avg_gap > 0.01 else ""))
+                train_auc = evaluate(y_tr, model.predict_proba(X_tr)[:, 1], metric="auc")
+                val_auc   = evaluate(y_val, val_proba, metric="auc")
+                fold_train_aucs.append(train_auc)
+                fold_val_aucs.append(val_auc)
+                print(f"    train AUC: {train_auc:.4f} | val AUC: {val_auc:.4f} | gap: {train_auc - val_auc:+.4f}")
 
-        fi_mean = pd.DataFrame({"feature": model_feature_names, "importance": fi_sum / n_folds})
-        fi_accumulator[model_type] = fi_mean.sort_values("importance", ascending=False).reset_index(drop=True)
+                fi_df = get_feature_importance(model, model_feature_names, model_type)
+                if not fi_df.empty:
+                    fi_sums[model_type] += fi_df["importance"].values
+                    fi_counts[model_type] += 1
 
-    # --- Level 0: MLP ---
-    if use_mlp:
-        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
-            print(f"  [mlp] fold {fold_i}/{n_folds} 학습 중...", flush=True)
-            X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
-            y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+                if compute_perm_importance and seed == seeds[-1] and fold_i == n_folds:
+                    auc_scorer = lambda est, Xv, yv: roc_auc_score(yv, est.predict_proba(Xv)[:, 1])
+                    pi = permutation_importance(
+                        model, X_val, y_val,
+                        n_repeats=5, random_state=42, scoring=auc_scorer,
+                    )
+                    perm_fi_sums[model_type] += pi.importances_mean
+                    perm_fi_counts[model_type] += 1
 
-            mlp_raw, scaler, X_val_scaled, device = train_mlp(X_tr.values, y_tr.values, X_val.values, y_val.values)
-            mlp = _TorchMLPWrapper(mlp_raw, device)
-            oof_preds["mlp"][valid_idx] = mlp.predict_proba(X_val_scaled)[:, 1]
-            test_preds["mlp"] += mlp.predict_proba(scaler.transform(X_test.values).astype(np.float32))[:, 1] / n_folds
-            last_mlp_model, last_mlp_scaler, last_val_idx = mlp, scaler, valid_idx
+            auc_score = evaluate(y, seed_oof[model_type], metric="auc")
+            avg_gap   = np.mean(fold_train_aucs) - np.mean(fold_val_aucs)
+            print(f"[seed={seed}][Level 0] {model_type} OOF AUC: {auc_score:.4f} | avg gap: {avg_gap:+.4f}"
+                  + (" ⚠ 과적합 의심" if avg_gap > 0.01 else ""))
 
-        mlp_auc = evaluate(y, oof_preds["mlp"], metric="auc")
-        print(f"[Level 0] mlp OOF AUC: {mlp_auc:.4f}")
+        # --- Level 0: MLP ---
+        if use_mlp:
+            for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+                print(f"  [seed={seed}][mlp] fold {fold_i}/{n_folds}", flush=True)
+                X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
+                y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+                mlp_raw, scaler, X_val_scaled, device = train_mlp(X_tr.values, y_tr.values, X_val.values, y_val.values)
+                mlp = _TorchMLPWrapper(mlp_raw, device)
+                seed_oof["mlp"][valid_idx] = mlp.predict_proba(X_val_scaled)[:, 1]
+                test_preds["mlp"] += mlp.predict_proba(scaler.transform(X_test.values).astype(np.float32))[:, 1] / (n_folds * len(seeds))
+                last_mlp_model, last_mlp_scaler, last_val_idx = mlp, scaler, valid_idx
+            print(f"[seed={seed}][Level 0] mlp OOF AUC: {evaluate(y, seed_oof['mlp'], metric='auc'):.4f}")
 
-    # --- Level 0: TabNet ---
-    if use_tabnet:
-        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
-            print(f"  [tabnet] fold {fold_i}/{n_folds} 학습 중...", flush=True)
-            X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
-            y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+        # --- Level 0: TabNet ---
+        if use_tabnet:
+            for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+                print(f"  [seed={seed}][tabnet] fold {fold_i}/{n_folds}", flush=True)
+                X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
+                y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+                tabnet, scaler, X_val_scaled = train_tabnet(X_tr.values, y_tr.values, X_val.values, y_val.values)
+                seed_oof["tabnet"][valid_idx] = tabnet.predict_proba(X_val_scaled)[:, 1]
+                test_preds["tabnet"] += tabnet.predict_proba(scaler.transform(X_test.values).astype(np.float32))[:, 1] / (n_folds * len(seeds))
+            print(f"[seed={seed}][Level 0] tabnet OOF AUC: {evaluate(y, seed_oof['tabnet'], metric='auc'):.4f}")
 
-            tabnet, scaler, X_val_scaled = train_tabnet(
-                X_tr.values, y_tr.values, X_val.values, y_val.values
-            )
-            oof_preds["tabnet"][valid_idx] = tabnet.predict_proba(X_val_scaled)[:, 1]
-            test_preds["tabnet"] += tabnet.predict_proba(
-                scaler.transform(X_test.values).astype(np.float32)
-            )[:, 1] / n_folds
+        # --- Level 0: FT-Transformer ---
+        if use_ft_transformer:
+            for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
+                print(f"  [seed={seed}][ft_transformer] fold {fold_i}/{n_folds}", flush=True)
+                X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
+                y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+                ft_raw, scaler, X_val_scaled, device = train_ft_transformer(X_tr.values, y_tr.values, X_val.values, y_val.values)
+                ft = _TorchWrapper(ft_raw, device)
+                seed_oof["ft_transformer"][valid_idx] = ft.predict_proba(X_val_scaled)[:, 1]
+                test_preds["ft_transformer"] += ft.predict_proba(scaler.transform(X_test.values).astype(np.float32))[:, 1] / (n_folds * len(seeds))
+            print(f"[seed={seed}][Level 0] ft_transformer OOF AUC: {evaluate(y, seed_oof['ft_transformer'], metric='auc'):.4f}")
 
-        tabnet_auc = evaluate(y, oof_preds["tabnet"], metric="auc")
-        print(f"[Level 0] tabnet OOF AUC: {tabnet_auc:.4f}")
+        for m in all_model_types:
+            seeds_oof[m].append(seed_oof[m].copy())
 
-    # --- Level 0: FT-Transformer ---
-    if use_ft_transformer:
-        for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
-            print(f"  [ft_transformer] fold {fold_i}/{n_folds} 학습 중...", flush=True)
-            X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
-            y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
+    # 시드 평균 OOF
+    oof_preds = {m: np.mean(seeds_oof[m], axis=0) for m in all_model_types}
 
-            ft_raw, scaler, X_val_scaled, device = train_ft_transformer(
-                X_tr.values, y_tr.values, X_val.values, y_val.values
-            )
-            ft = _TorchWrapper(ft_raw, device)
-            oof_preds["ft_transformer"][valid_idx] = ft.predict_proba(X_val_scaled)[:, 1]
-            test_preds["ft_transformer"] += ft.predict_proba(
-                scaler.transform(X_test.values).astype(np.float32)
-            )[:, 1] / n_folds
+    print(f"\n{'='*20} 시드 평균 OOF AUC {'='*20}")
+    for m in all_model_types:
+        print(f"  {m}: {evaluate(y, oof_preds[m], metric='auc'):.4f}")
 
-        ft_auc = evaluate(y, oof_preds["ft_transformer"], metric="auc")
-        print(f"[Level 0] ft_transformer OOF AUC: {ft_auc:.4f}")
+    # FI 평균
+    fi_accumulator: dict[str, pd.DataFrame] = {}
+    for mt in model_types:
+        cnt = fi_counts[mt]
+        if cnt > 0:
+            fi_mean = pd.DataFrame({"feature": fi_feature_names[mt], "importance": fi_sums[mt] / cnt})
+            fi_accumulator[mt] = fi_mean.sort_values("importance", ascending=False).reset_index(drop=True)
 
-    # --- Level 1: 메타 모델 ---
-    meta_X = np.column_stack([oof_preds[m] for m in all_model_types])
+    # Permutation importance 집계 및 시각화
+    if compute_perm_importance:
+        perm_fi_accumulator: dict[str, pd.DataFrame] = {}
+        for mt in model_types:
+            cnt = perm_fi_counts[mt]
+            if cnt > 0:
+                perm_mean = pd.DataFrame({
+                    "feature": fi_feature_names[mt],
+                    "importance": perm_fi_sums[mt] / cnt,
+                })
+                perm_fi_accumulator[mt] = perm_mean.sort_values("importance", ascending=False).reset_index(drop=True)
+        plot_tree_permutation_importance(perm_fi_accumulator, fi_accumulator)
+        from history import save_perm_fi
+        save_perm_fi(perm_fi_accumulator)
+
+    # --- Level 1: RidgeCV (alpha 자동 최적화) ---
+    meta_X      = np.column_stack([oof_preds[m] for m in all_model_types])
     meta_X_test = np.column_stack([test_preds[m] for m in all_model_types])
 
-    meta_model = Ridge(alpha=1.0)
+    alphas = [0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
+    meta_model = RidgeCV(alphas=alphas, cv=5)
     meta_model.fit(meta_X, y)
+    print(f"\n[Level 1] Ridge best alpha: {meta_model.alpha_:.4f}")
+
     meta_oof_proba = np.clip(meta_model.predict(meta_X), 0.0, 1.0)
     stacking_auc = evaluate(y, meta_oof_proba, metric="auc")
-    print(f"\n[Level 1] Stacking OOF AUC: {stacking_auc:.4f}")
-
-    meta_weights = dict(zip(all_model_types, meta_model.coef_))
-    print("Meta model coefficients:", {k: f"{v:.4f}" for k, v in meta_weights.items()})
+    print(f"[Level 1] Stacking OOF AUC: {stacking_auc:.4f}")
+    print("Meta model coefficients:", {k: f"{v:.4f}" for k, v in zip(all_model_types, np.ravel(meta_model.coef_))})
 
     # Feature importance 출력 및 시각화
     if show_feature_importance and fi_accumulator:
@@ -659,12 +744,7 @@ def run_stacking_ensemble(
 
     mlp_artifacts = None
     if use_mlp and last_mlp_model is not None:
-        mlp_artifacts = {
-            "mlp": last_mlp_model,
-            "scaler": last_mlp_scaler,
-            "val_idx": last_val_idx,
-            "fi_accumulator": fi_accumulator,
-        }
+        mlp_artifacts = {"mlp": last_mlp_model, "scaler": last_mlp_scaler, "val_idx": last_val_idx}
 
     return final_pred, mlp_artifacts, fi_accumulator, oof_preds, meta_model
 
