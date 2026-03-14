@@ -112,5 +112,160 @@
       "ensemble": 0.916543
     },
     "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 13:43:05",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916089,
+      "lightgbm": 0.916356,
+      "xgboost": 0.91633,
+      "ensemble": 0.916609
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:04:01",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916156,
+      "lightgbm": 0.91642,
+      "xgboost": 0.916223,
+      "ensemble": 0.916654
+    },
+    "lb_score": 0.91403
+  },
+  {
+    "timestamp": "2026-03-14 14:13:27",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916227,
+      "lightgbm": 0.916588,
+      "xgboost": 0.916387,
+      "ensemble": 0.916756
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:15:46",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "fe_flags": "none",
+    "auc": {
+      "catboost": 0.916156,
+      "lightgbm": 0.916474,
+      "xgboost": 0.916375,
+      "ensemble": 0.91669
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:18:14",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916113,
+      "lightgbm": 0.916441,
+      "xgboost": 0.916241,
+      "ensemble": 0.916649
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:20:49",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916015,
+      "lightgbm": 0.916367,
+      "xgboost": 0.916185,
+      "ensemble": 0.916582
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:23:22",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916142,
+      "lightgbm": 0.916443,
+      "xgboost": 0.916356,
+      "ensemble": 0.916664
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:25:25",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.91599,
+      "lightgbm": 0.916349,
+      "xgboost": 0.91618,
+      "ensemble": 0.91656
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:28:16",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916111,
+      "lightgbm": 0.91639,
+      "xgboost": 0.916217,
+      "ensemble": 0.916605
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:31:25",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.91611,
+      "lightgbm": 0.916415,
+      "xgboost": 0.916278,
+      "ensemble": 0.916633
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:36:35",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.91623,
+      "lightgbm": 0.916555,
+      "xgboost": 0.916378,
+      "ensemble": 0.916743
+    },
+    "lb_score": 0.9141
+  },
+  {
+    "timestamp": "2026-03-14 14:42:46",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916008,
+      "lightgbm": 0.916422,
+      "xgboost": 0.916223,
+      "ensemble": 0.916718
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:48:01",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.915981,
+      "lightgbm": 0.916422,
+      "xgboost": 0.916213,
+      "ensemble": 0.916699
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 14:53:41",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.915991,
+      "lightgbm": 0.916541,
+      "xgboost": 0.916263,
+      "ensemble": 0.916769
+    },
+    "lb_score": null
   }
 ]

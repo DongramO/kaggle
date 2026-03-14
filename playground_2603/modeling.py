@@ -8,7 +8,7 @@ import numpy as np
 import lightgbm as lgb
 import xgboost as xgb
 from catboost import CatBoostClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import StratifiedKFold
@@ -521,6 +521,8 @@ def run_stacking_ensemble(
     use_tabnet: bool = True,
     use_ft_transformer: bool = False,
     show_feature_importance: bool = True,
+    X_per_model: dict[str, pd.DataFrame] | None = None,
+    X_test_per_model: dict[str, pd.DataFrame] | None = None,
 ) -> np.ndarray:
     """
     스태킹 앙상블:
@@ -544,25 +546,39 @@ def run_stacking_ensemble(
     # --- Level 0: 트리 모델 ---
     for model_type in model_types:
         best_params = best_params_dict[model_type]
-        fi_sum = np.zeros(len(feature_names))
+        X_m      = X_per_model.get(model_type, X)      if X_per_model      else X
+        X_test_m = X_test_per_model.get(model_type, X_test) if X_test_per_model else X_test
+        model_feature_names = list(X_m.columns)
+        fi_sum = np.zeros(len(model_feature_names))
+        fold_train_aucs, fold_val_aucs = [], []
 
         for fold_i, (train_idx, valid_idx) in enumerate(skf.split(X, y), 1):
             print(f"  [{model_type}] fold {fold_i}/{n_folds} 학습 중...", flush=True)
-            X_tr, X_val = X.iloc[train_idx], X.iloc[valid_idx]
-            y_tr, _ = y.iloc[train_idx], y.iloc[valid_idx]
+            X_tr, X_val = X_m.iloc[train_idx], X_m.iloc[valid_idx]
+            y_tr, y_val = y.iloc[train_idx], y.iloc[valid_idx]
 
             model = train_model(X_tr, y_tr, model_type, best_params)
-            oof_preds[model_type][valid_idx] = model.predict_proba(X_val)[:, 1]
-            test_preds[model_type] += model.predict_proba(X_test)[:, 1] / n_folds
 
-            fi_df = get_feature_importance(model, feature_names, model_type)
+            val_proba = model.predict_proba(X_val)[:, 1]
+            oof_preds[model_type][valid_idx] = val_proba
+            test_preds[model_type] += model.predict_proba(X_test_m)[:, 1] / n_folds
+
+            train_auc = evaluate(y_tr, model.predict_proba(X_tr)[:, 1], metric="auc")
+            val_auc   = evaluate(y_val, val_proba, metric="auc")
+            fold_train_aucs.append(train_auc)
+            fold_val_aucs.append(val_auc)
+            print(f"    train AUC: {train_auc:.4f} | val AUC: {val_auc:.4f} | gap: {train_auc - val_auc:+.4f}")
+
+            fi_df = get_feature_importance(model, model_feature_names, model_type)
             if not fi_df.empty:
                 fi_sum += fi_df["importance"].values
 
         auc_score = evaluate(y, oof_preds[model_type], metric="auc")
-        print(f"[Level 0] {model_type} OOF AUC: {auc_score:.4f}")
+        avg_gap = np.mean(fold_train_aucs) - np.mean(fold_val_aucs)
+        print(f"[Level 0] {model_type} OOF AUC: {auc_score:.4f} | 평균 train-val gap: {avg_gap:+.4f}"
+              + (" ⚠ 과적합 의심" if avg_gap > 0.01 else ""))
 
-        fi_mean = pd.DataFrame({"feature": feature_names, "importance": fi_sum / n_folds})
+        fi_mean = pd.DataFrame({"feature": model_feature_names, "importance": fi_sum / n_folds})
         fi_accumulator[model_type] = fi_mean.sort_values("importance", ascending=False).reset_index(drop=True)
 
     # --- Level 0: MLP ---
@@ -622,13 +638,13 @@ def run_stacking_ensemble(
     meta_X = np.column_stack([oof_preds[m] for m in all_model_types])
     meta_X_test = np.column_stack([test_preds[m] for m in all_model_types])
 
-    meta_model = LogisticRegression(C=1.0, max_iter=1000, random_state=42)
+    meta_model = Ridge(alpha=1.0)
     meta_model.fit(meta_X, y)
-    meta_oof_proba = meta_model.predict_proba(meta_X)[:, 1]
+    meta_oof_proba = np.clip(meta_model.predict(meta_X), 0.0, 1.0)
     stacking_auc = evaluate(y, meta_oof_proba, metric="auc")
     print(f"\n[Level 1] Stacking OOF AUC: {stacking_auc:.4f}")
 
-    meta_weights = dict(zip(all_model_types, meta_model.coef_[0]))
+    meta_weights = dict(zip(all_model_types, meta_model.coef_))
     print("Meta model coefficients:", {k: f"{v:.4f}" for k, v in meta_weights.items()})
 
     # Feature importance 출력 및 시각화
@@ -639,7 +655,7 @@ def run_stacking_ensemble(
             print(fi_df.head(20).to_string(index=False))
         plot_feature_importance(fi_accumulator, top_n=30, save_path="feature_importance.png")
 
-    final_pred = meta_model.predict_proba(meta_X_test)[:, 1]
+    final_pred = np.clip(meta_model.predict(meta_X_test), 0.0, 1.0)
 
     mlp_artifacts = None
     if use_mlp and last_mlp_model is not None:
@@ -677,7 +693,7 @@ def diagnose_stacking(
     corr_matrix = oof_df.corr()
 
     # --- 3. 메타 모델 계수 ---
-    coef = dict(zip(model_types, meta_model.coef_[0]))
+    coef = dict(zip(model_types, np.ravel(meta_model.coef_)))
 
     # --- 콘솔 요약 ---
     print("\n========== Stacking Diagnosis ==========")

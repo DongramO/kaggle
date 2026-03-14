@@ -12,7 +12,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 
 from data_loader import load_all
-from prepare_data import prepare_data, filter_correlated_features
+from prepare_data import prepare_data, filter_correlated_features, FE_FLAGS_PER_MODEL, apply_model_fe
 from modeling import run_stacking_ensemble, train_model, diagnose_stacking
 from history import save_auc_log, save_fi_history, plot_fi_history
 
@@ -31,9 +31,9 @@ def main(
 
     print("[2/5] 데이터 전처리 중...")
     X, y, X_test = prepare_data(train_df, test_df, target_col=target_col)
-    # drop_cols = filter_correlated_features(X)
-    # X = X.drop(columns=drop_cols)
-    # X_test = X_test.drop(columns=drop_cols)
+    drop_cols = filter_correlated_features(X)
+    X = X.drop(columns=drop_cols)
+    X_test = X_test.drop(columns=drop_cols)
 
     print("[3/5] 하이퍼파라미터 로드 중...")
     with open(Path(__file__).parent / "best_hyperparameters.json", "r", encoding="utf-8") as f:
@@ -41,6 +41,18 @@ def main(
     model_types = ["catboost", "lightgbm", "xgboost"]
 
     print("[4/5] 스태킹 앙상블 학습 중...")
+    X_per_model, X_test_per_model = {}, {}
+    for mt in model_types:
+        X_fe      = apply_model_fe(X,      FE_FLAGS_PER_MODEL.get(mt, {}))
+        X_test_fe = apply_model_fe(X_test, FE_FLAGS_PER_MODEL.get(mt, {}))
+        # FE 추가 후 상관 높은 피처 제거 (원본+FE 포함해서 재필터링)
+        drop_fe = filter_correlated_features(X_fe)
+        X_per_model[mt]      = X_fe.drop(columns=drop_fe)
+        X_test_per_model[mt] = X_test_fe.drop(columns=[c for c in drop_fe if c in X_test_fe.columns])
+        added   = [c for c in X_per_model[mt].columns if c not in X.columns]
+        removed = [c for c in drop_fe if c in X.columns]  # 원본 컬럼 중 제거된 것
+        print(f"      [{mt}] FE 추가: {added if added else '없음'} | 상관 제거: {removed if removed else '없음'}")
+
     ensemble_pred, _, fi_accumulator, oof_preds, meta_model = run_stacking_ensemble(
         X=X,
         y=y,
@@ -50,6 +62,8 @@ def main(
         use_mlp=False,
         use_tabnet=False,
         use_ft_transformer=False,
+        X_per_model=X_per_model,
+        X_test_per_model=X_test_per_model,
     )
 
     print("[5/5] submission 저장 중...")
@@ -58,9 +72,10 @@ def main(
     print("      submission_ensemble.csv saved")
 
     auc_dict = {m: roc_auc_score(y, oof_preds[m]) for m in oof_preds}
-    meta_oof = meta_model.predict_proba(
-        np.column_stack([oof_preds[m] for m in oof_preds])
-    )[:, 1]
+    meta_oof = np.clip(
+        meta_model.predict(np.column_stack([oof_preds[m] for m in oof_preds])),
+        0.0, 1.0,
+    )
     auc_dict["ensemble"] = roc_auc_score(y, meta_oof)
     save_auc_log(auc_dict, run_type=f"ensemble:{'+'.join(model_types)}")
 

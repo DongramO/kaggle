@@ -12,6 +12,26 @@ ORDINAL_COLS = {
 
 TARGET_ENCODING_COLS = []
 
+FE_FLAGS_PER_MODEL = {
+    "catboost": {
+        "charge_per_log_tenure":      True,
+        "contract_x_avg_charge":      True,
+        "contract_x_charge_log":      True,
+    },
+    "lightgbm": {
+        "avg_monthly_charge":         True,
+        "charge_increase":            True,
+        "charge_consistency":         True,
+        "security_count":             True,
+    },
+    "xgboost": {
+        "high_risk_combo":               True,
+        "contract_x_electronic_check":   True,
+        "fiber_x_paperless":             True,
+        "streaming_count":               True,
+    },
+}
+
 DIRECT_MAPPING_COLS = {
     'PhoneService':      {'No': 0, 'Yes': 1},
     'Partner':           {'No': 0, 'Yes': 1},
@@ -45,8 +65,6 @@ def prepare_data(
 
     train, test = _basic_preprocessing(train, test)
     train, test = _direct_mapping(train, test)
-    train = feature_engineering(train)
-    test = feature_engineering(test)
     train, test = _kfold_target_encoding(train, test, TARGET_ENCODING_COLS, y_train)
     train, test = _fit_transform_onehot(train, test)
     train, test = _fit_transform_ordinal(train, test)
@@ -59,28 +77,112 @@ def get_feature_columns(df: pd.DataFrame, target_col: str | None = None, id_col:
     return [c for c in df.columns if c not in exclude]
 
 
-def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
+def feature_engineering(df: pd.DataFrame, flags: dict | None = None) -> pd.DataFrame:
+    """
+    FE_FLAGS의 각 키를 True로 설정해 피처를 하나씩 활성화.
+    의존 관계가 있는 피처(charge_increase → avg_monthly_charge 등)는
+    중간값을 내부에서 계산해 처리.
+    """
+    if flags is None:
+        flags = {}
+
     eps = 1e-6
     X = df.copy()
 
-    # --- 기존 ---
-    X['avg_monthly_charge'] = X['TotalCharges'] / (X['tenure'] + eps)
-    X['charge_increase'] = X['MonthlyCharges'] - X['avg_monthly_charge']
-    X['security_count'] = X['OnlineSecurity'] + X['OnlineBackup'] + X['DeviceProtection'] + X['TechSupport']
-    X['monthly_charge_per_service'] = X['MonthlyCharges'] / (X['security_count'] + 1)
-    X['charge_consistency'] = X['TotalCharges'] / (X['MonthlyCharges'] * X['tenure'] + eps)
+    # 중간값 (플래그와 무관하게 필요 시 계산)
+    avg_monthly_charge   = X['TotalCharges'] / (X['tenure'] + eps)
+    security_count       = X['OnlineSecurity'] + X['OnlineBackup'] + X['DeviceProtection'] + X['TechSupport']
+    charge_per_log_tenure = X['MonthlyCharges'] / np.log1p(X['tenure'])
+    contract_map         = {'Month-to-month': 0, 'One year': 1, 'Two year': 2}
+    contract_numeric     = X['Contract'].map(contract_map).fillna(0)
 
-    # --- 계약×비용 관점 ---
-    # log 보정 비용 부담: tenure가 짧을수록 월 비용 부담이 가파르게 증가
-    X['charge_per_log_tenure'] = X['MonthlyCharges'] / np.log1p(X['tenure'])
+    if flags.get("avg_monthly_charge"):
+        X['avg_monthly_charge'] = avg_monthly_charge
 
-    # --- 계약 × 비용 interaction ---
-    contract_map = {'Month-to-month': 0, 'One year': 1, 'Two year': 2}
-    contract_numeric = X['Contract'].map(contract_map).fillna(0)
-    X['contract_x_charge_log'] = contract_numeric * X['charge_per_log_tenure']
-    X['contract_x_avg_charge'] = contract_numeric * X['avg_monthly_charge']
+    if flags.get("charge_increase"):
+        X['charge_increase'] = X['MonthlyCharges'] - avg_monthly_charge
+
+    if flags.get("security_count"):
+        X['security_count'] = security_count
+
+    if flags.get("monthly_charge_per_service"):
+        X['monthly_charge_per_service'] = X['MonthlyCharges'] / (security_count + 1)
+
+    if flags.get("charge_consistency"):
+        X['charge_consistency'] = X['TotalCharges'] / (X['MonthlyCharges'] * X['tenure'] + eps)
+
+    if flags.get("charge_per_log_tenure"):
+        X['charge_per_log_tenure'] = charge_per_log_tenure
+
+    if flags.get("contract_x_charge_log"):
+        X['contract_x_charge_log'] = contract_numeric * charge_per_log_tenure
+
+    if flags.get("contract_x_avg_charge"):
+        X['contract_x_avg_charge'] = contract_numeric * avg_monthly_charge
 
     return X
+
+
+def apply_model_fe(X: pd.DataFrame, flags: dict | None = None) -> pd.DataFrame:
+    """
+    인코딩 완료된 데이터에 모델별 FE 피처를 추가.
+    Contract는 ordinal 인코딩 후 0/1/2 숫자로 사용.
+    FE_FLAGS_PER_MODEL의 모델별 플래그를 전달해 사용.
+    """
+    if not flags:
+        return X
+
+    eps = 1e-6
+    df = X.copy()
+
+    avg_monthly_charge    = df['TotalCharges'] / (df['tenure'] + eps)
+    charge_per_log_tenure = df['MonthlyCharges'] / np.log1p(df['tenure'])
+    security_count        = df['OnlineSecurity'] + df['OnlineBackup'] + df['DeviceProtection'] + df['TechSupport']
+    contract_numeric      = df['Contract']  # ordinal 인코딩 후 0.0 / 1.0 / 2.0
+
+    if flags.get("avg_monthly_charge"):
+        df['avg_monthly_charge'] = avg_monthly_charge
+
+    if flags.get("charge_increase"):
+        df['charge_increase'] = df['MonthlyCharges'] - avg_monthly_charge
+
+    if flags.get("security_count"):
+        df['security_count'] = security_count
+
+    if flags.get("monthly_charge_per_service"):
+        df['monthly_charge_per_service'] = df['MonthlyCharges'] / (security_count + 1)
+
+    if flags.get("charge_consistency"):
+        df['charge_consistency'] = df['TotalCharges'] / (df['MonthlyCharges'] * df['tenure'] + eps)
+
+    if flags.get("charge_per_log_tenure"):
+        df['charge_per_log_tenure'] = charge_per_log_tenure
+
+    if flags.get("contract_x_charge_log"):
+        df['contract_x_charge_log'] = contract_numeric * charge_per_log_tenure
+
+    if flags.get("contract_x_avg_charge"):
+        df['contract_x_avg_charge'] = contract_numeric * avg_monthly_charge
+
+    # --- XGBoost 전용: 범주형 조합 ---
+    if flags.get("high_risk_combo"):
+        is_mtm   = (df['Contract'] == 0).astype(int)
+        is_echeck = df.get('PaymentMethod_Electronic check', pd.Series(0, index=df.index))
+        is_fiber  = df.get('InternetService_Fiber optic',    pd.Series(0, index=df.index))
+        df['high_risk_combo'] = is_mtm * is_echeck * is_fiber
+
+    if flags.get("contract_x_electronic_check"):
+        is_echeck = df.get('PaymentMethod_Electronic check', pd.Series(0, index=df.index))
+        df['contract_x_electronic_check'] = contract_numeric * is_echeck
+
+    if flags.get("fiber_x_paperless"):
+        is_fiber = df.get('InternetService_Fiber optic', pd.Series(0, index=df.index))
+        df['fiber_x_paperless'] = is_fiber * df['PaperlessBilling']
+
+    if flags.get("streaming_count"):
+        df['streaming_count'] = df['StreamingTV'] + df['StreamingMovies']
+
+    return df
 
 
 def filter_correlated_features(
