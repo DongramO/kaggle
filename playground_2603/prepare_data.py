@@ -10,7 +10,7 @@ ORDINAL_COLS = {
     'Contract': ['Month-to-month', 'One year', 'Two year'],
 }
 
-TARGET_ENCODING_COLS = ['PaymentMethod', 'InternetService']
+TARGET_ENCODING_COLS = []
 
 DIRECT_MAPPING_COLS = {
     'PhoneService':      {'No': 0, 'Yes': 1},
@@ -79,24 +79,6 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     contract_numeric = X['Contract'].map(contract_map).fillna(0)
     X['contract_x_charge_log'] = contract_numeric * X['charge_per_log_tenure']
     X['contract_x_avg_charge'] = contract_numeric * X['avg_monthly_charge']
-
-    # --- 고위험 프로파일 (인코딩 전 raw 문자열 활용) ---
-    is_fiber     = (X['InternetService'] == 'Fiber optic').astype(int)
-    is_electronic = (X['PaymentMethod'] == 'Electronic check').astype(int)
-    is_monthly   = (X['Contract'] == 'Month-to-month').astype(int)
-
-    # Fiber + 전자결제: 이탈 고위험 조합
-    X['fiber_x_electronic'] = is_fiber * is_electronic
-    # 월정산 + 전자결제: 자동이체 없는 단기 고객
-    X['monthly_x_electronic'] = is_monthly * is_electronic
-    # 3중 위험: 월정산 + Fiber + 전자결제
-    X['triple_risk'] = is_monthly * is_fiber * is_electronic
-
-    # --- 비용 × 인터넷 서비스 interaction ---
-    # Fiber 고객의 비용 부담 (Fiber는 비싸고 이탈률 높음)
-    X['fiber_x_monthly_charge'] = is_fiber * X['MonthlyCharges']
-    # tenure × MonthlyCharges: 장기 고비용 고객 vs 단기 고비용 고객 구분
-    X['tenure_x_monthly'] = X['tenure'] * X['MonthlyCharges']
 
     return X
 

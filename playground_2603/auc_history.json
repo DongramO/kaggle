@@ -90,5 +90,27 @@
       "ensemble": 0.916473
     },
     "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 13:09:34",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916024,
+      "lightgbm": 0.916356,
+      "xgboost": 0.916202,
+      "ensemble": 0.916536
+    },
+    "lb_score": 0.91388
+  },
+  {
+    "timestamp": "2026-03-14 13:17:19",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916048,
+      "lightgbm": 0.916356,
+      "xgboost": 0.916202,
+      "ensemble": 0.916543
+    },
+    "lb_score": null
   }
 ]
