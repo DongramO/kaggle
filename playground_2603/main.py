@@ -4,6 +4,7 @@ EDA는 run_eda.py로 별도 실행. run_eda=True 시 main에서도 호출 가능
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,51 @@ from data_loader import load_all
 from prepare_data import prepare_data, filter_correlated_features, FE_FLAGS_PER_MODEL, apply_model_fe
 from modeling import run_stacking_ensemble, train_model, diagnose_stacking
 from history import save_auc_log, save_fi_history, plot_fi_history
+
+
+def _auto_commit_if_best(current_auc: float, run_label: str) -> None:
+    """현재 ensemble OOF AUC가 역대 최고면 자동 git commit."""
+    auc_log_path = Path(__file__).parent / "auc_history.json"
+    if not auc_log_path.exists():
+        return
+
+    with open(auc_log_path, "r", encoding="utf-8") as f:
+        log = json.load(f)
+
+    prev_best = max(
+        (entry["auc"].get("ensemble", 0.0) for entry in log[:-1]),
+        default=0.0,
+    )
+
+    if current_auc <= prev_best:
+        print(f"\n[Auto-commit] 스킵 (현재 {current_auc:.5f} ≤ 역대 최고 {prev_best:.5f})")
+        return
+
+    print(f"\n[Auto-commit] 신기록! {prev_best:.5f} → {current_auc:.5f}")
+    msg = f"신기록 OOF AUC {current_auc:.5f} ({run_label})"
+
+    repo_root = Path(__file__).parent.parent
+    try:
+        subprocess.run(
+            ["git", "add",
+             "playground_2603/auc_history.json",
+             "playground_2603/fi_history.json",
+             "playground_2603/best_hyperparameters.json",
+             "playground_2603/main.py",
+             "playground_2603/modeling.py",
+             "playground_2603/prepare_data.py",
+             "playground_2603/history.py",
+             "playground_2603/run_optuna.py",
+             ],
+            cwd=repo_root, check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=repo_root, check=True,
+        )
+        print(f"[Auto-commit] 완료: {msg}")
+    except subprocess.CalledProcessError as e:
+        print(f"[Auto-commit] 실패: {e}")
 
 
 def main(
@@ -45,12 +91,11 @@ def main(
     for mt in model_types:
         X_fe      = apply_model_fe(X,      FE_FLAGS_PER_MODEL.get(mt, {}))
         X_test_fe = apply_model_fe(X_test, FE_FLAGS_PER_MODEL.get(mt, {}))
-        # FE 추가 후 상관 높은 피처 제거 (원본+FE 포함해서 재필터링)
         drop_fe = filter_correlated_features(X_fe)
         X_per_model[mt]      = X_fe.drop(columns=drop_fe)
         X_test_per_model[mt] = X_test_fe.drop(columns=[c for c in drop_fe if c in X_test_fe.columns])
         added   = [c for c in X_per_model[mt].columns if c not in X.columns]
-        removed = [c for c in drop_fe if c in X.columns]  # 원본 컬럼 중 제거된 것
+        removed = [c for c in drop_fe if c in X.columns]
         print(f"      [{mt}] FE 추가: {added if added else '없음'} | 상관 제거: {removed if removed else '없음'}")
 
     ensemble_pred, _, fi_accumulator, oof_preds, meta_model = run_stacking_ensemble(
@@ -80,12 +125,15 @@ def main(
         0.0, 1.0,
     )
     auc_dict["ensemble"] = roc_auc_score(y, meta_oof)
-    save_auc_log(auc_dict, run_type=f"ensemble:{'+'.join(model_types)}")
+    run_label = f"ensemble:{'+'.join(model_types)}"
+    save_auc_log(auc_dict, run_type=run_label)
 
     diagnose_stacking(oof_preds, y, meta_model, n_train=len(X))
 
     save_fi_history(fi_accumulator)
     plot_fi_history()
+
+    _auto_commit_if_best(auc_dict["ensemble"], run_label)
 
 
 def run_single_model(model_type: str, data_dir: str | Path = "data", target_col: str = "Churn"):
