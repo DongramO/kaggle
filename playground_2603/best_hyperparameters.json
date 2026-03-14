@@ -25,7 +25,7 @@
   "lightgbm": {
     "n_estimators": 681,
     "learning_rate": 0.05219636636989595,
-    "num_leaves": 27,
+    "num_leaves": 50,
     "min_child_samples": 29,
     "subsample": 0.7481400295460576,
     "colsample_bytree": 0.44630470355051965,
