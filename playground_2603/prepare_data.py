@@ -4,8 +4,12 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import StratifiedKFold
 from eda import correlation_analysis
 
-ONEHOT_COLS = ['PaymentMethod', 'InternetService']
-DROP_COLS   = ['gender']   # permutation importance 낮음
+ONEHOT_COLS    = ['PaymentMethod', 'InternetService']
+DROP_COLS      = ['gender']   # permutation importance 낮음
+NGRAM_TE_COLS  = [
+    'Contract', 'InternetService', 'PaymentMethod',
+    'OnlineSecurity', 'TechSupport', 'PaperlessBilling',
+]  # n-gram TE 대상 컬럼 (feature importance 상위 카테고리)
 
 ORDINAL_COLS = {
     'Contract': ['Month-to-month', 'One year', 'Two year'],
@@ -95,6 +99,8 @@ def prepare_data(
     y_train = pd.Series(le.fit_transform(y_train.astype(str)), index=y_train.index, name=target_col)
 
     train, test = _basic_preprocessing(train, test)
+    train, test = _ngram_target_encoding(train, test, NGRAM_TE_COLS, y_train)
+    train, test = _add_digit_features(train, test)
     train, test = _direct_mapping(train, test)
     train, test = _fit_transform_onehot(train, test)
     train, test = _fit_transform_ordinal(train, test)
@@ -290,6 +296,133 @@ def filter_correlated_features(
         save_dir=save_dir,
     )
     return [c for c in result['drop_candidates'] if c in df.columns]
+
+
+def _add_digit_features(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    수치형 컬럼에서 자릿수/주기/소수점 패턴 피처 추가.
+
+    선택 기준 — 크기(magnitude)가 아닌 '패턴'을 담은 것만:
+      tenure_mod12       : 12개월 주기 → 계약 갱신 시점 (0이면 갱신 직후)
+      mc_fractional      : MonthlyCharges 소수점 → 심리적 가격책정 (.99, .95 등)
+      mc_dev_from_round10: 반올림값과의 편차 → 요금 책정 전략
+      charges_deviation  : TotalCharges - tenure×MonthlyCharges → 중도 요금 변경 감지
+      monthly_to_total   : MonthlyCharges / TotalCharges → 최근 요금 비중
+    """
+    eps = 1e-6
+    for df in [train, test]:
+        # tenure: 12개월 주기 (갱신 시점 패턴)
+        df['tenure_mod12'] = df['tenure'] % 12
+
+        # MonthlyCharges: 소수점 패턴 + 반올림 편차
+        df['mc_fractional']      = df['MonthlyCharges'] - np.floor(df['MonthlyCharges'])
+        rounded10                = np.round(df['MonthlyCharges'] / 10) * 10
+        df['mc_dev_from_round10'] = np.abs(df['MonthlyCharges'] - rounded10)
+
+        # TotalCharges: 이론값 대비 실제 누적 요금 편차
+        df['charges_deviation']   = df['TotalCharges'] - df['tenure'] * df['MonthlyCharges']
+
+        # 현재 월 요금이 누적 요금에서 차지하는 비중
+        df['monthly_to_total']    = df['MonthlyCharges'] / (df['TotalCharges'] + eps)
+
+    print("      [Digit FE] tenure_mod12, mc_fractional, mc_dev_from_round10, charges_deviation, monthly_to_total 추가")
+    return train, test
+
+
+def _ngram_target_encoding(
+    train: pd.DataFrame,
+    test: pd.DataFrame,
+    cols: list[str],
+    y: pd.Series,
+    ns: list[int] = [2, 3],
+    smoothing: float = 10.0,
+    n_splits: int = 5,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    여러 카테고리 컬럼을 하나의 문장으로 결합 후 word n-gram Target Encoding.
+
+    동작 방식:
+      1) cols 컬럼들을 공백으로 이어붙여 문장 생성
+         예) Contract="Month-to-month", PaymentMethod="Electronic check", InternetService="Fiber optic"
+             → "Month-to-month Electronic check Fiber optic"
+
+      2) 문장을 단어 단위 n-gram으로 분해
+         bigrams  : ["Month-to-month Electronic", "Electronic check", "check Fiber", "Fiber optic"]
+         trigrams : ["Month-to-month Electronic check", "Electronic check Fiber", "check Fiber optic"]
+
+      3) 각 n-gram의 이탈률 평균을 KFold TE로 계산 (smoothing 적용)
+         예) "Electronic check" → 평균 이탈률 0.45
+
+      4) 행마다 포함된 n-gram들의 TE 평균 → ngram_te_2, ngram_te_3 컬럼으로 추가
+
+    OHE/Ordinal 인코딩 전에 원본 문자열 값이 필요하므로 가장 먼저 호출.
+    KFold TE로 train leakage 방지, test는 전체 train 통계 사용.
+    """
+    valid_cols = [c for c in cols if c in train.columns]
+    if not valid_cols:
+        return train, test
+
+    global_mean = float(y.mean())
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+    # 컬럼 결합 → 문장 (원본 문자열 값 사용)
+    def combine(df: pd.DataFrame) -> pd.Series:
+        return df[valid_cols].astype(str).apply(lambda row: " ".join(row), axis=1)
+
+    def get_ngrams(text: str, n: int) -> list[str]:
+        words = text.split()
+        if len(words) < n:
+            return words  # n보다 짧으면 unigram 반환
+        return [" ".join(words[i: i + n]) for i in range(len(words) - n + 1)]
+
+    def build_ngram_stats(sentences: pd.Series, targets: pd.Series, n: int) -> dict:
+        """n-gram별 (합계, 개수) 딕셔너리 반환."""
+        stats: dict[str, list] = {}
+        for text, t in zip(sentences, targets):
+            for ng in get_ngrams(text, n):
+                if ng not in stats:
+                    stats[ng] = [0.0, 0]
+                stats[ng][0] += t
+                stats[ng][1] += 1
+        return stats
+
+    def stats_to_te(stats: dict, smoothing: float, global_mean: float) -> dict:
+        return {
+            ng: (v[0] + smoothing * global_mean) / (v[1] + smoothing)
+            for ng, v in stats.items()
+        }
+
+    train_combined = combine(train)
+    test_combined  = combine(test)
+
+    for n in ns:
+        col_name = f"ngram_te_{n}"
+        train[col_name] = global_mean  # 기본값
+
+        # KFold TE — train leakage 방지
+        for tr_idx, val_idx in skf.split(train, y):
+            stats = build_ngram_stats(
+                train_combined.iloc[tr_idx], y.iloc[tr_idx], n
+            )
+            te_map = stats_to_te(stats, smoothing, global_mean)
+
+            val_sentences = train_combined.iloc[val_idx]
+            te_vals = val_sentences.apply(
+                lambda text: float(np.mean([te_map.get(ng, global_mean) for ng in get_ngrams(text, n)]))
+            )
+            train.loc[train.index[val_idx], col_name] = te_vals.values
+
+        # test — 전체 train 통계 사용
+        full_stats = build_ngram_stats(train_combined, y, n)
+        full_te    = stats_to_te(full_stats, smoothing, global_mean)
+        test[col_name] = test_combined.apply(
+            lambda text: float(np.mean([full_te.get(ng, global_mean) for ng in get_ngrams(text, n)]))
+        )
+
+        bi_or_tri = "Bigram" if n == 2 else "Trigram"
+        print(f"      [{bi_or_tri} TE] {col_name} 추가 — 고유 n-gram 수: {len(full_stats)}")
+
+    return train, test
 
 
 def _basic_preprocessing(train: pd.DataFrame, test: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:

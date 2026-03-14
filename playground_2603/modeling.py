@@ -560,6 +560,19 @@ def plot_tree_permutation_importance(
     print(f"\n저장: {save_path}")
 
 
+class _SimpleAverager:
+    """predict_proba 없이 단순 평균을 반환하는 메타모델 호환 wrapper."""
+    def fit(self, X, y):
+        return self
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return X.mean(axis=1)
+
+    @property
+    def coef_(self):
+        return None
+
+
 def run_stacking_ensemble(
     X: pd.DataFrame,
     y: pd.Series,
@@ -575,11 +588,12 @@ def run_stacking_ensemble(
     seeds: list[int] = [42],
     n_folds: int = 5,
     compute_perm_importance: bool = False,
+    meta_method: str = "ridge",
 ) -> np.ndarray:
     """
     멀티시드 스태킹 앙상블:
     - Level 0: CatBoost / LightGBM / XGBoost (각 seed × n_folds로 OOF 평균)
-    - Level 1: RidgeCV (alpha 자동 최적화)
+    - Level 1: meta_method="ridge" → RidgeCV | "average" → 단순 평균
     """
     neural_types = (["mlp"] if use_mlp else []) + (["tabnet"] if use_tabnet else []) + (["ft_transformer"] if use_ft_transformer else [])
     all_model_types = model_types + neural_types
@@ -718,19 +732,24 @@ def run_stacking_ensemble(
         from history import save_perm_fi
         save_perm_fi(perm_fi_accumulator)
 
-    # --- Level 1: RidgeCV (alpha 자동 최적화) ---
+    # --- Level 1: 메타 모델 ---
     meta_X      = np.column_stack([oof_preds[m] for m in all_model_types])
     meta_X_test = np.column_stack([test_preds[m] for m in all_model_types])
 
-    alphas = [0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
-    meta_model = RidgeCV(alphas=alphas, cv=5)
-    meta_model.fit(meta_X, y)
-    print(f"\n[Level 1] Ridge best alpha: {meta_model.alpha_:.4f}")
+    if meta_method == "average":
+        meta_model = _SimpleAverager()
+        meta_model.fit(meta_X, y)
+        print(f"\n[Level 1] Simple Average (모델 수: {len(all_model_types)})")
+    else:
+        alphas = [0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0]
+        meta_model = RidgeCV(alphas=alphas, cv=5)
+        meta_model.fit(meta_X, y)
+        print(f"\n[Level 1] Ridge best alpha: {meta_model.alpha_:.4f}")
+        print("Meta model coefficients:", {k: f"{v:.4f}" for k, v in zip(all_model_types, np.ravel(meta_model.coef_))})
 
     meta_oof_proba = np.clip(meta_model.predict(meta_X), 0.0, 1.0)
     stacking_auc = evaluate(y, meta_oof_proba, metric="auc")
-    print(f"[Level 1] Stacking OOF AUC: {stacking_auc:.4f}")
-    print("Meta model coefficients:", {k: f"{v:.4f}" for k, v in zip(all_model_types, np.ravel(meta_model.coef_))})
+    print(f"[Level 1] Ensemble OOF AUC: {stacking_auc:.4f}")
 
     # Feature importance 출력 및 시각화
     if show_feature_importance and fi_accumulator:
@@ -773,7 +792,7 @@ def diagnose_stacking(
     corr_matrix = oof_df.corr()
 
     # --- 3. 메타 모델 계수 ---
-    coef = dict(zip(model_types, np.ravel(meta_model.coef_)))
+    coef = dict(zip(model_types, np.ravel(meta_model.coef_))) if meta_model.coef_ is not None else {}
 
     # --- 콘솔 요약 ---
     print("\n========== Stacking Diagnosis ==========")
@@ -781,10 +800,13 @@ def diagnose_stacking(
     print("\n[OOF AUC per model]")
     for m, auc in sorted(auc_scores.items(), key=lambda x: -x[1]):
         print(f"  {m:12s}: {auc:.4f}")
-    print("\n[Meta model coefficients]")
-    for m, c in sorted(coef.items(), key=lambda x: -x[1]):
-        direction = "▲ 기여" if c > 0 else "▼ 역기여"
-        print(f"  {m:12s}: {c:+.4f}  {direction}")
+    if coef:
+        print("\n[Meta model coefficients]")
+        for m, c in sorted(coef.items(), key=lambda x: -x[1]):
+            direction = "▲ 기여" if c > 0 else "▼ 역기여"
+            print(f"  {m:12s}: {c:+.4f}  {direction}")
+    else:
+        print("\n[Meta model] Simple Average (계수 없음)")
     print("\n[OOF 예측 상관관계] — 1에 가까울수록 중복, 낮을수록 다양성 있음")
     print(corr_matrix.round(3).to_string())
 
@@ -825,13 +847,17 @@ def diagnose_stacking(
 
     # (c) 메타 계수
     ax = axes[2]
-    coef_names = list(coef.keys())
-    coef_vals = [coef[n] for n in coef_names]
-    colors_c = ["steelblue" if v >= 0 else "salmon" for v in coef_vals]
-    ax.barh(coef_names, coef_vals, color=colors_c)
-    ax.axvline(0, color="black", linewidth=0.8)
-    ax.set_title("Meta Model Coefficients\n(음수 = 역기여)")
-    ax.set_xlabel("Coefficient")
+    if coef:
+        coef_names = list(coef.keys())
+        coef_vals = [coef[n] for n in coef_names]
+        colors_c = ["steelblue" if v >= 0 else "salmon" for v in coef_vals]
+        ax.barh(coef_names, coef_vals, color=colors_c)
+        ax.axvline(0, color="black", linewidth=0.8)
+        ax.set_title("Meta Model Coefficients\n(음수 = 역기여)")
+        ax.set_xlabel("Coefficient")
+    else:
+        ax.text(0.5, 0.5, "Simple Average\n(계수 없음)", ha="center", va="center", fontsize=13)
+        ax.set_title("Meta Model")
 
     plt.suptitle(f"Stacking Diagnosis  |  train {n_train:,}행", fontsize=13)
     plt.tight_layout()

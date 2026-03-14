@@ -112,6 +112,7 @@ def main(
         seeds=[42, 0, 7],
         n_folds=5,
         compute_perm_importance=False,
+        meta_method="ridge",
     )
 
     print("[5/5] submission 저장 중...")

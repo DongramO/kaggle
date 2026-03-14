@@ -585,7 +585,7 @@
       "xgboost": 0.916667,
       "ensemble": 0.916982
     },
-    "lb_score": null
+    "lb_score": 0.91422
   },
   {
     "timestamp": "2026-03-15 00:22:09",
@@ -596,6 +596,50 @@
       "xgboost": 0.916729,
       "ensemble": 0.917028
     },
-    "lb_score": null
+    "lb_score": 0.91417
+  },
+  {
+    "timestamp": "2026-03-15 00:33:53",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916243,
+      "lightgbm": 0.916859,
+      "xgboost": 0.91667,
+      "ensemble": 0.916916
+    },
+    "lb_score": 0.91419
+  },
+  {
+    "timestamp": "2026-03-15 00:49:51",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916037,
+      "lightgbm": 0.916596,
+      "xgboost": 0.915887,
+      "ensemble": 0.916791
+    },
+    "lb_score": 0.91424
+  },
+  {
+    "timestamp": "2026-03-15 01:05:22",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916024,
+      "lightgbm": 0.916564,
+      "xgboost": 0.916246,
+      "ensemble": 0.916805
+    },
+    "lb_score": 0.91426
+  },
+  {
+    "timestamp": "2026-03-15 01:26:41",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916185,
+      "lightgbm": 0.916838,
+      "xgboost": 0.916616,
+      "ensemble": 0.916974
+    },
+    "lb_score": 0.91433
   }
 ]
