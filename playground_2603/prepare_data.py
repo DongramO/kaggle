@@ -66,33 +66,37 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     # --- 기존 ---
     X['avg_monthly_charge'] = X['TotalCharges'] / (X['tenure'] + eps)
     X['charge_increase'] = X['MonthlyCharges'] - X['avg_monthly_charge']
-    X['streaming_count'] = X['StreamingTV'] + X['StreamingMovies']
     X['security_count'] = X['OnlineSecurity'] + X['OnlineBackup'] + X['DeviceProtection'] + X['TechSupport']
-    X['total_services'] = X['security_count'] + X['streaming_count']
-    X['is_new_customer'] = (X['tenure'] <= 6).astype(int)
-    X['monthly_charge_per_service'] = X['MonthlyCharges'] / (X['total_services'] + 1)
+    X['monthly_charge_per_service'] = X['MonthlyCharges'] / (X['security_count'] + 1)
     X['charge_consistency'] = X['TotalCharges'] / (X['MonthlyCharges'] * X['tenure'] + eps)
 
     # --- 계약×비용 관점 ---
     # log 보정 비용 부담: tenure가 짧을수록 월 비용 부담이 가파르게 증가
     X['charge_per_log_tenure'] = X['MonthlyCharges'] / np.log1p(X['tenure'])
-    # tenure 구간: 0=신규(≤6), 1=중기(≤24), 2=장기(24+)
-    X['tenure_segment'] = pd.cut(
-        X['tenure'], bins=[-1, 6, 24, float('inf')], labels=[0, 1, 2]
-    ).astype(int)
 
-    # --- 사람 관점 ---
-    # 가족 안정성 합산 (0~2)
-    X['family_stability'] = X['Partner'] + X['Dependents']
-
-    # --- 비선형 interaction (MLP 분석 기반) ---
-    # Contract 인코딩: Month-to-month=0, One year=1, Two year=2 (ordinal 순서와 동일)
+    # --- 계약 × 비용 interaction ---
     contract_map = {'Month-to-month': 0, 'One year': 1, 'Two year': 2}
     contract_numeric = X['Contract'].map(contract_map).fillna(0)
-    # Contract × charge_per_log_tenure: 단기계약 + 높은 비용부담 = 강한 이탈 시그널
     X['contract_x_charge_log'] = contract_numeric * X['charge_per_log_tenure']
-    # Contract × avg_monthly_charge: 계약 유형별 평균 비용 수준 조합
     X['contract_x_avg_charge'] = contract_numeric * X['avg_monthly_charge']
+
+    # --- 고위험 프로파일 (인코딩 전 raw 문자열 활용) ---
+    is_fiber     = (X['InternetService'] == 'Fiber optic').astype(int)
+    is_electronic = (X['PaymentMethod'] == 'Electronic check').astype(int)
+    is_monthly   = (X['Contract'] == 'Month-to-month').astype(int)
+
+    # Fiber + 전자결제: 이탈 고위험 조합
+    X['fiber_x_electronic'] = is_fiber * is_electronic
+    # 월정산 + 전자결제: 자동이체 없는 단기 고객
+    X['monthly_x_electronic'] = is_monthly * is_electronic
+    # 3중 위험: 월정산 + Fiber + 전자결제
+    X['triple_risk'] = is_monthly * is_fiber * is_electronic
+
+    # --- 비용 × 인터넷 서비스 interaction ---
+    # Fiber 고객의 비용 부담 (Fiber는 비싸고 이탈률 높음)
+    X['fiber_x_monthly_charge'] = is_fiber * X['MonthlyCharges']
+    # tenure × MonthlyCharges: 장기 고비용 고객 vs 단기 고비용 고객 구분
+    X['tenure_x_monthly'] = X['tenure'] * X['MonthlyCharges']
 
     return X
 

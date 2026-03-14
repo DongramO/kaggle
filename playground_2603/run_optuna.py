@@ -23,7 +23,7 @@ N_TRIALS = 50
 N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
-MODEL_TYPES = ["lightgbm", "catboost", "xgboost"]
+MODEL_TYPES = ["xgboost"]
 
 def _get_data():
     """데이터 로드 및 전처리."""
@@ -90,20 +90,26 @@ def create_objective_catboost(X, y):
 
 def create_objective_xgb(X, y):
     """XGBoost용 Optuna objective 함수."""
+    # Contract 단조 제약: 계약 기간 길수록 이탈 확률 감소 (고정값, 튜닝 대상 아님)
+    monotone_constraints = {col: 0 for col in X.columns}
+    if "Contract" in X.columns:
+        monotone_constraints["Contract"] = -1
 
     def objective(trial):
         import xgboost as xgb
 
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 200, 800),
-            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "n_estimators": trial.suggest_int("n_estimators", 200, 1000),
+            "max_depth": trial.suggest_int("max_depth", 3, 6),
             "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "gamma": trial.suggest_float("gamma", 0.0, 1.0),
+            "colsample_bynode": trial.suggest_float("colsample_bynode", 0.3, 0.8),
+            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
+            "monotone_constraints": monotone_constraints,
             "random_state": RANDOM_STATE,
             "verbosity": 0,
             "tree_method": "hist",

@@ -1,0 +1,94 @@
+[
+  {
+    "timestamp": "2026-03-13 23:02:50",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916078,
+      "lightgbm": 0.91642,
+      "xgboost": 0.914133,
+      "ensemble": 0.916551
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-13 23:06:24",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.915993,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "ensemble": 0.916461
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-13 23:14:59",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916037,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "mlp": 0.912648,
+      "ensemble": 0.916427
+    },
+    "lb_score": 0.91383
+  },
+  {
+    "timestamp": "2026-03-14 00:03:33",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916016,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "mlp": 0.913207,
+      "ensemble": 0.915383
+    },
+    "lb_score": 0.91257
+  },
+  {
+    "timestamp": "2026-03-14 00:27:24",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916009,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "mlp": 0.913135,
+      "ensemble": 0.915392
+    },
+    "lb_score": 0.91253
+  },
+  {
+    "timestamp": "2026-03-14 06:49:38",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916008,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "ft_transformer": 0.913768,
+      "ensemble": 0.915469
+    },
+    "lb_score": 0.91263
+  },
+  {
+    "timestamp": "2026-03-14 12:45:39",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916029,
+      "lightgbm": 0.916303,
+      "xgboost": 0.915712,
+      "ensemble": 0.916476
+    },
+    "lb_score": 0.91387
+  },
+  {
+    "timestamp": "2026-03-14 12:59:22",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.915988,
+      "lightgbm": 0.916311,
+      "xgboost": 0.915674,
+      "ensemble": 0.916473
+    },
+    "lb_score": null
+  }
+]
