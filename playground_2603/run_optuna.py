@@ -12,23 +12,27 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 
 from data_loader import load_all
-from prepare_data import prepare_data, get_feature_columns
+from prepare_data import prepare_data, get_feature_columns, FE_FLAGS_PER_MODEL, apply_model_fe, filter_correlated_features
 
 
 # ========== 설정 (실행 시 수정) ==========
 DATA_DIR = Path(__file__).parent / "data"
 TARGET_COL = "Churn"
 ID_COL = "id"
-N_TRIALS = 50
+N_TRIALS = 30
 N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
-MODEL_TYPES = ["xgboost"]
+MODEL_TYPES = ["catboost", "lightgbm", "xgboost"]
 
-def _get_data():
-    """데이터 로드 및 전처리."""
+
+def _get_data(model_type: str):
+    """데이터 로드 및 전처리 (모델별 FE + 상관 필터 적용)."""
     train_df, test_df, _ = load_all(DATA_DIR)
     X, y, _ = prepare_data(train_df, test_df, target_col=TARGET_COL)
+    X = apply_model_fe(X, FE_FLAGS_PER_MODEL.get(model_type, {}))
+    drop_cols = filter_correlated_features(X)
+    X = X.drop(columns=drop_cols)
     return X, y
 
 
@@ -39,14 +43,17 @@ def create_objective_lgbm(X, y):
         import lightgbm as lgb
 
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 200, 800),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.5, log=True),
-            "num_leaves": trial.suggest_int("num_leaves", 20, 200),
-            "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            # reg_alpha 현재 9.7로 과도 → 하한 낮춰 탐색 범위 확대
+            # num_leaves 상한 80으로 축소 → 모델 복잡도 제한
+            # min_child_samples 하한 20으로 상향 → 최소 노드 크기 보장
+            "n_estimators":       trial.suggest_int("n_estimators", 300, 1000),
+            "learning_rate":      trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "num_leaves":         trial.suggest_int("num_leaves", 20, 80),
+            "min_child_samples":  trial.suggest_int("min_child_samples", 20, 100),
+            "subsample":          trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree":   trial.suggest_float("colsample_bytree", 0.4, 0.9),
+            "reg_alpha":          trial.suggest_float("reg_alpha", 0.1, 10.0, log=True),
+            "reg_lambda":         trial.suggest_float("reg_lambda", 0.5, 10.0, log=True),
             "random_state": RANDOM_STATE,
             "verbosity": -1,
             "device": "gpu",
@@ -67,13 +74,16 @@ def create_objective_catboost(X, y):
         from catboost import CatBoostClassifier
 
         params = {
-            "iterations": trial.suggest_int("iterations", 100, 1000),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "depth": trial.suggest_int("depth", 3, 10),
-            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-2, 10.0, log=True),
-            "random_strength": trial.suggest_float("random_strength", 1e-3, 10.0, log=True),
-            "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 100),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            # l2_leaf_reg 현재 0.22로 너무 낮음 → 하한 1.0으로 상향
+            # depth 상한 8로 축소 → 깊은 트리로 인한 과적합 방지
+            # iterations 상한 확대 + learning_rate 하한 낮춤 → 더 정밀한 학습
+            "iterations":       trial.suggest_int("iterations", 500, 1500),
+            "learning_rate":    trial.suggest_float("learning_rate", 0.02, 0.2, log=True),
+            "depth":            trial.suggest_int("depth", 4, 8),
+            "l2_leaf_reg":      trial.suggest_float("l2_leaf_reg", 1.0, 20.0, log=True),
+            "random_strength":  trial.suggest_float("random_strength", 1e-3, 10.0, log=True),
+            "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 10, 100),
+            "subsample":        trial.suggest_float("subsample", 0.5, 1.0),
             "random_state": RANDOM_STATE,
             "verbose": 0,
             "task_type": "GPU",
@@ -99,16 +109,22 @@ def create_objective_xgb(X, y):
         import xgboost as xgb
 
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 200, 1000),
-            "max_depth": trial.suggest_int("max_depth", 3, 6),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-            "min_child_weight": trial.suggest_int("min_child_weight", 1, 20),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "colsample_bynode": trial.suggest_float("colsample_bynode", 0.3, 0.8),
-            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 0.1, 10.0, log=True),
+            # FE 피처 추가로 특성 수 증가 → reg_alpha/lambda 전반적 상향
+            # reg_alpha: 0.10 → 하한 0.5로 상향 (L1 희소성 강화)
+            # reg_lambda: 0.16 → 하한 1.0으로 상향 (L2 정규화 강화)
+            # gamma: 가지치기 강도 하한 0.5로 상향
+            # min_child_weight: 하한 10으로 상향 → 작은 노드 방지
+            # max_depth: 상한 5로 축소
+            "n_estimators":      trial.suggest_int("n_estimators", 500, 1500),
+            "max_depth":         trial.suggest_int("max_depth", 3, 5),
+            "learning_rate":     trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "min_child_weight":  trial.suggest_int("min_child_weight", 10, 50),
+            "subsample":         trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree":  trial.suggest_float("colsample_bytree", 0.4, 0.9),
+            "colsample_bynode":  trial.suggest_float("colsample_bynode", 0.3, 0.8),
+            "gamma":             trial.suggest_float("gamma", 0.5, 10.0, log=True),
+            "reg_alpha":         trial.suggest_float("reg_alpha", 0.5, 20.0, log=True),
+            "reg_lambda":        trial.suggest_float("reg_lambda", 1.0, 20.0, log=True),
             "monotone_constraints": monotone_constraints,
             "random_state": RANDOM_STATE,
             "verbosity": 0,
@@ -133,11 +149,8 @@ OBJECTIVE_FNS = {
 
 
 def run_optuna():
-    """Optuna 최적화 실행 및 결과 저장. model_types 미지정 시 MODEL_TYPES 사용."""
+    """Optuna 최적화 실행 및 결과 저장."""
     model_types = MODEL_TYPES
-    print("데이터 로드 중...")
-    X, y = _get_data()
-    print(f"X: {X.shape}, y: {y.shape}")
 
     if OUTPUT_PATH.exists():
         with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
@@ -149,8 +162,13 @@ def run_optuna():
         if model_type not in OBJECTIVE_FNS:
             print(f"건너뜀(미지원): {model_type}")
             continue
+
+        print(f"\n데이터 로드 중... [{model_type}]")
+        X, y = _get_data(model_type)
+        print(f"X: {X.shape}, y: {y.shape}")
+
         obj_fn = OBJECTIVE_FNS[model_type]
-        print(f"\n=== {model_type} Optuna 시작 (n_trials={N_TRIALS}) ===")
+        print(f"=== {model_type} Optuna 시작 (n_trials={N_TRIALS}) ===")
         study = optuna.create_study(
             direction="maximize",
             sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE, n_startup_trials=5),

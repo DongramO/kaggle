@@ -267,5 +267,16 @@
       "ensemble": 0.916769
     },
     "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-14 16:15:16",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916018,
+      "lightgbm": 0.916508,
+      "xgboost": 0.916507,
+      "ensemble": 0.916818
+    },
+    "lb_score": 0.91425
   }
 ]
