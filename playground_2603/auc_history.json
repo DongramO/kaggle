@@ -641,5 +641,49 @@
       "ensemble": 0.916974
     },
     "lb_score": 0.91433
+  },
+  {
+    "timestamp": "2026-03-15 01:40:23",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916322,
+      "lightgbm": 0.916758,
+      "xgboost": 0.916539,
+      "ensemble": 0.91689
+    },
+    "lb_score": null
+  },
+  {
+    "timestamp": "2026-03-15 01:57:31",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916275,
+      "lightgbm": 0.916836,
+      "xgboost": 0.916616,
+      "ensemble": 0.91699
+    },
+    "lb_score": 0.91434
+  },
+  {
+    "timestamp": "2026-03-15 11:55:32",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916285,
+      "lightgbm": 0.91673,
+      "xgboost": 0.916587,
+      "ensemble": 0.916898
+    },
+    "lb_score": 0.9142
+  },
+  {
+    "timestamp": "2026-03-15 18:12:39",
+    "run_type": "ensemble:catboost+lightgbm+xgboost",
+    "auc": {
+      "catboost": 0.916308,
+      "lightgbm": 0.916838,
+      "xgboost": 0.916616,
+      "ensemble": 0.916995
+    },
+    "lb_score": null
   }
 ]

@@ -23,16 +23,29 @@ N_TRIALS = 30
 N_FOLDS = 5
 RANDOM_STATE = 42
 OUTPUT_PATH = Path(__file__).parent / "best_hyperparameters.json"
-MODEL_TYPES = ["xgboost"]
+MODEL_TYPES = ["xgboost", "catboost", "lightgbm"]
 
 
 def _get_data(model_type: str):
-    """데이터 로드 및 전처리 (모델별 FE + 상관 필터 적용)."""
+    """데이터 로드 및 전처리 — main.py와 동일한 파이프라인 적용.
+    1) 기본 피처 상관 필터
+    2) 모델별 FE 적용
+    3) FE 포함 상관 필터
+    """
     train_df, test_df, _ = load_all(DATA_DIR)
     X, y, _ = prepare_data(train_df, test_df, target_col=TARGET_COL)
+
+    # 1단계: 기본 피처 상관 필터 (main.py와 동일)
+    drop_base = filter_correlated_features(X)
+    X = X.drop(columns=drop_base)
+
+    # 2단계: 모델별 FE
     X = apply_model_fe(X, FE_FLAGS_PER_MODEL.get(model_type, {}))
-    drop_cols = filter_correlated_features(X)
-    X = X.drop(columns=drop_cols)
+
+    # 3단계: FE 포함 상관 필터
+    drop_fe = filter_correlated_features(X)
+    X = X.drop(columns=drop_fe)
+
     return X, y
 
 

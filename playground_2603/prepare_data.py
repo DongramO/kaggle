@@ -31,6 +31,8 @@ FE_FLAGS_PER_MODEL = {
         "charge_per_service":         False,   # perm 낮음
         "no_support":                 False,
         "partner_x_dependents":       False,
+        # digit 피처 (CatBoost 전용 — 대칭 트리 구조에 효과적)
+        "digit_features":             True,
     },
     "lightgbm": {
         "avg_monthly_charge":         True,
@@ -100,7 +102,6 @@ def prepare_data(
 
     train, test = _basic_preprocessing(train, test)
     train, test = _ngram_target_encoding(train, test, NGRAM_TE_COLS, y_train)
-    train, test = _add_digit_features(train, test)
     train, test = _direct_mapping(train, test)
     train, test = _fit_transform_onehot(train, test)
     train, test = _fit_transform_ordinal(train, test)
@@ -277,6 +278,15 @@ def apply_model_fe(X: pd.DataFrame, flags: dict | None = None) -> pd.DataFrame:
 
     if flags.get("partner_x_dependents"):
         df['partner_x_dependents'] = df['Partner'] * df['Dependents']
+
+    # --- CatBoost 전용: Digit 피처 ---
+    if flags.get("digit_features"):
+        df['tenure_mod12']        = df['tenure'] % 12
+        df['mc_fractional']       = df['MonthlyCharges'] - np.floor(df['MonthlyCharges'])
+        rounded10                 = np.round(df['MonthlyCharges'] / 10) * 10
+        df['mc_dev_from_round10'] = np.abs(df['MonthlyCharges'] - rounded10)
+        df['charges_deviation']   = df['TotalCharges'] - df['tenure'] * df['MonthlyCharges']
+        df['monthly_to_total']    = df['MonthlyCharges'] / (df['TotalCharges'] + eps)
 
     return df
 

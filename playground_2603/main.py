@@ -94,9 +94,10 @@ def main(
         drop_fe = filter_correlated_features(X_fe)
         X_per_model[mt]      = X_fe.drop(columns=drop_fe)
         X_test_per_model[mt] = X_test_fe.drop(columns=[c for c in drop_fe if c in X_test_fe.columns])
-        added   = [c for c in X_per_model[mt].columns if c not in X.columns]
-        removed = [c for c in drop_fe if c in X.columns]
-        print(f"      [{mt}] FE 추가: {added if added else '없음'} | 상관 제거: {removed if removed else '없음'}")
+        added      = [c for c in X_per_model[mt].columns if c not in X.columns]
+        removed    = [c for c in drop_fe if c in X.columns]
+        removed_fe = [c for c in drop_fe if c not in X.columns]
+        print(f"      [{mt}] FE 추가: {added if added else '없음'} | 상관 제거(원본): {removed if removed else '없음'} | 상관 제거(FE): {removed_fe if removed_fe else '없음'}")
 
     ensemble_pred, _, fi_accumulator, oof_preds, meta_model = run_stacking_ensemble(
         X=X,
