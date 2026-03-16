@@ -110,7 +110,7 @@ def main(
         use_ft_transformer=False,
         X_per_model=X_per_model,
         X_test_per_model=X_test_per_model,
-        seeds=[42, 0, 7],
+        seeds=[42, 0, 7, 13, 21],
         n_folds=5,
         compute_perm_importance=False,
         meta_method="ridge",
